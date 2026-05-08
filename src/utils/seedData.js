@@ -1,0 +1,51 @@
+export const menuSamples = [
+  { name: 'Burrata & Heirloom Tomatoes', category: 'starters', price: 18, description: 'Fresh burrata cheese with seasonal heirloom tomatoes, aged balsamic reduction, fresh basil', image: 'https://images.unsplash.com/photo-1608897013039-887f21d8c804?w=800&q=80', is_available: true, is_hidden: false, stock: 25 },
+  { name: 'Wagyu Beef Tartare', category: 'starters', price: 28, description: 'Premium A5 wagyu beef, quail egg, capers, cornichons, truffle aioli', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Tuna Tartare', category: 'starters', price: 22, description: 'Yellowfin tuna, avocado, sesame, crispy wonton chips', image: 'https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Crispy Calamari', category: 'starters', price: 16, description: 'Lightly fried calamari, spicy aioli, fresh lemon, herbs', image: 'https://images.unsplash.com/photo-1599487486515-8d0f6f542d4f?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'French Onion Soup', category: 'starters', price: 14, description: 'Caramelized onions, beef broth, gruyère crouton', image: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Dry-Aged Ribeye', category: 'mains', price: 58, description: '45-day dry-aged prime ribeye, bone marrow butter, roasted vegetables', image: 'https://images.unsplash.com/photo-1600891964092-4316c288032e?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Filet Mignon', category: 'mains', price: 52, description: '8oz center-cut filet, red wine reduction, truffle mashed potatoes', image: 'https://images.unsplash.com/photo-1558030006-450675393462?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Pan-Seared Salmon', category: 'mains', price: 38, description: 'Wild-caught salmon, lemon beurre blanc, asparagus, dill', image: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Roasted Duck Breast', category: 'mains', price: 42, description: 'Cherry gastrique, sweet potato purée, baby bok choy', image: 'https://images.unsplash.com/photo-1580476262798-bddd9f4b7369?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Truffle Risotto', category: 'mains', price: 34, description: 'Arborio rice, black truffle, aged parmesan, fresh herbs', image: 'https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Lobster Thermidor', category: 'mains', price: 65, description: 'Maine lobster, cognac cream, gruyère, roasted fingerling potatoes', image: 'https://images.unsplash.com/photo-1553247407-23251b9c19e8?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Grilled Lamb Chops', category: 'mains', price: 48, description: 'Herb-crusted Colorado lamb, mint sauce, rosemary roasted potatoes', image: 'https://images.unsplash.com/photo-1514516345957-556ca7d90a29?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Chocolate Lava Cake', category: 'desserts', price: 16, description: 'Warm Valrhona chocolate cake, vanilla bean ice cream, raspberry coulis', image: 'https://images.unsplash.com/photo-1624353365286-3f8d62daad51?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Crème Brûlée', category: 'desserts', price: 12, description: 'Classic vanilla bean custard, caramelized sugar, fresh berries', image: 'https://images.unsplash.com/photo-1470124182917-cc6e71b22ecc?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Tiramisu', category: 'desserts', price: 14, description: 'Espresso-soaked ladyfingers, mascarpone, cocoa, amaretto', image: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Panna Cotta', category: 'desserts', price: 11, description: 'Vanilla bean panna cotta, seasonal berry compote', image: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Cheese Board', category: 'desserts', price: 24, description: 'Selection of artisan cheeses, honeycomb, nuts, fig jam', image: 'https://images.unsplash.com/photo-1452195100486-9cc805987862?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Old Fashioned', category: 'drinks', price: 18, description: 'Bourbon, smoked maple, angostura bitters, orange peel', image: 'https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Signature Martini', category: 'drinks', price: 16, description: 'Premium vodka, elderflower, cucumber, lime', image: 'https://images.unsplash.com/photo-1575023782549-62ca0d244b39?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'House Red Wine', category: 'drinks', price: 14, description: 'Rotating selection of premium red wines by the glass', image: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'House White Wine', category: 'drinks', price: 12, description: 'Rotating selection of premium white wines by the glass', image: 'https://images.unsplash.com/photo-1566754436893-a5fc3af4eb33?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Sparkling Water', category: 'drinks', price: 6, description: 'San Pellegrino sparkling mineral water', image: 'https://images.unsplash.com/photo-1523362628745-0c100150b504?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Fresh Pressed Juice', category: 'drinks', price: 10, description: 'Daily selection of fresh pressed fruit or vegetable juices', image: 'https://images.unsplash.com/photo-1600271884442-392fc1c4d909?w=800&q=80', is_available: true, is_hidden: false },
+  { name: 'Chef\'s Secret Menu Item #1', category: 'specials', price: 85, description: 'A unique creation available only to VIP guests. Ask your server.', image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&q=80', is_available: true, is_hidden: true },
+  { name: 'Chef\'s Secret Menu Item #2', category: 'specials', price: 95, description: 'An exclusive dish crafted with rare ingredients.', image: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600&q=80', is_available: true, is_hidden: true },
+  { name: 'Exclusive Wine Pairing', category: 'drinks', price: 120, description: 'A curated 5-course wine pairing experience', image: 'https://images.unsplash.com/photo-1506377247377-2a5b3b7ebb01?w=600&q=80', is_available: true, is_hidden: true },
+  { name: 'Private Dining Special', category: 'specials', price: 150, description: 'Personalized menu for private events', image: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600&q=80', is_available: true, is_hidden: true }
+];
+
+export const customerSamples = [
+  { name: 'Ahmed Hassan', email: 'ahmed@example.com', phone: '01012345678', address: 'Cairo, Egypt', loyalty_points: 150 },
+  { name: 'Sarah Mohamed', email: 'sarah@example.com', phone: '01023456789', address: 'Alexandria, Egypt', loyalty_points: 280 },
+  { name: 'Omar Ibrahim', email: 'omar@example.com', phone: '01034567890', address: 'Giza, Egypt', loyalty_points: 95 },
+  { name: 'Fatima Ahmed', email: 'fatima@example.com', phone: '01045678901', address: 'Mansoura, Egypt', loyalty_points: 420 },
+  { name: 'Ali Hassan', email: 'ali@example.com', phone: '01056789012', address: 'Tanta, Egypt', loyalty_points: 175 },
+  { name: 'Layla Mohamed', email: 'layla@example.com', phone: '01067890123', address: 'Suez, Egypt', loyalty_points: 310 },
+  { name: 'Youssef Ibrahim', email: 'youssef@example.com', phone: '01078901234', address: 'Zagazig, Egypt', loyalty_points: 60 },
+  { name: 'Noor Ahmed', email: 'noor@example.com', phone: '01089012345', address: 'Aswan, Egypt', loyalty_points: 540 }
+];
+
+export const orderSamples = [
+  { customerName: 'Ahmed Hassan', phone: '01012345678', tableNumber: 5, items: [{ name: 'Burrata & Heirloom Tomatoes', quantity: 1, price: 18 }, { name: 'Dry-Aged Ribeye', quantity: 1, price: 56 }], total: 74, status: 'completed', orderType: 'dine-in', createdAt: new Date(Date.now() - 86400000 * 2) },
+  { customerName: 'Sarah Mohamed', phone: '01023456789', tableNumber: 8, items: [{ name: 'Wagyu Beef Tartar', quantity: 1, price: 24 }, { name: 'Pan-Seared Salmon', quantity: 1, price: 38 }], total: 62, status: 'completed', orderType: 'dine-in', createdAt: new Date(Date.now() - 86400000 * 3) },
+  { customerName: 'Omar Ibrahim', phone: '01034567890', tableNumber: 12, items: [{ name: 'Truffle Risotto', quantity: 2, price: 32 }], total: 64, status: 'preparing', orderType: 'dine-in', createdAt: new Date(Date.now() - 3600000) },
+  { customerName: 'Fatima Ahmed', phone: '01045678901', tableNumber: 3, items: [{ name: 'Chocolate Fondant', quantity: 2, price: 14 }, { name: 'Crème Brûlée', quantity: 1, price: 12 }], total: 40, status: 'pending', orderType: 'dine-in', createdAt: new Date() },
+  { customerName: 'Ali Hassan', phone: '01056789012', tableNumber: null, items: [{ name: 'Dry-Aged Ribeye', quantity: 1, price: 56 }, { name: 'House Wine Selection', quantity: 2, price: 14 }], total: 84, status: 'ready', orderType: 'pickup', createdAt: new Date(Date.now() - 7200000) },
+  { customerName: 'Layla Mohamed', phone: '01067890123', tableNumber: 15, items: [{ name: 'Roasted Duck Breast', quantity: 1, price: 42 }, { name: 'Tiramisu', quantity: 1, price: 13 }], total: 55, status: 'completed', orderType: 'dine-in', createdAt: new Date(Date.now() - 86400000) },
+  { customerName: 'Youssef Ibrahim', phone: '01078901234', tableNumber: null, items: [{ name: 'Ember Old Fashioned', quantity: 3, price: 16 }], total: 48, status: 'completed', orderType: 'delivery', createdAt: new Date(Date.now() - 86400000 * 4) },
+  { customerName: 'Noor Ahmed', phone: '01089012345', tableNumber: 7, items: [{ name: 'Grilled Chicken', quantity: 1, price: 16 }, { name: 'Pan-Seared Salmon', quantity: 1, price: 38 }, { name: 'Crème Brûlée', quantity: 1, price: 12 }], total: 66, status: 'preparing', orderType: 'dine-in', createdAt: new Date(Date.now() - 1800000) }
+];

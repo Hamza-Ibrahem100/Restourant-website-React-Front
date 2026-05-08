@@ -7,23 +7,10 @@ import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import { useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
-import { db } from './firebase';
-import { ref, set } from 'firebase/database';
-
 function App() {
   const { user, isLoggedIn } = useAuth();
   const navigate = useNavigate();
   const currentPath = window.location.pathname;
-
-  useEffect(() => {
-    const testRef = ref(db, 'connection_test');
-    set(testRef, {
-      status: 'Connected!',
-      developer: 'Hamza Ibrahim',
-      timestamp: Date.now()
-    }).then(() => console.log('✅ RTDB Connected Successfully!'))
-      .catch((error) => console.error('❌ RTDB Error:', error));
-  }, []);
 
   useEffect(() => {
     const publicPaths = ['/register', '/cart', '/login'];

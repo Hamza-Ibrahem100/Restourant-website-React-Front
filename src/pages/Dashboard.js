@@ -15,8 +15,14 @@ import {
 } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import imageCompression from 'browser-image-compression';
+import OverviewTab from '../components/dashboard/OverviewTab';
+import ReservationsTab from '../components/dashboard/ReservationsTab';
+import '../styles/Dashboard.css';
+import { useAuth } from '../context/AuthContext';
 
 function Dashboard() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.email?.toLowerCase() === 'hamzaelsharkh@gmail.com';
   const [activeTab, setActiveTab] = useState('overview');
   const [reservations, setReservations] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -809,111 +815,28 @@ const removeAuthorizedEmail = async (id) => {
           </div>
 
           <div className="dash-tabs">
-            {['overview', 'customers', 'orders', 'reservations', 'requests', 'menu', 'users', 'analytics', 'reports', 'notifications'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`dash-tab${activeTab === tab ? ' active' : ''}`}
-              >
-                {tab === 'users' ? 'User Access' : tab}
-              </button>
-            ))}
+            {['overview', 'customers', 'orders', 'reservations', 'requests', 'menu', 'users', 'analytics', 'reports', 'notifications'].map(tab => {
+              if (tab === 'users' && !isSuperAdmin) return null;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`dash-tab${activeTab === tab ? ' active' : ''}`}
+                >
+                  {tab === 'users' ? 'User Access' : tab}
+                </button>
+              );
+            })}
           </div>
 
           {activeTab === 'overview' && (
-            <div>
-              <div className="dash-grid-stats">
-                <div style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)' }}>
-                  <h3 style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '2px' }}>Total Revenue</h3>
-                  <p style={{ fontSize: '32px', color: 'var(--primary-accent)', fontFamily: 'Playfair Display, serif' }}>
-                    ${analytics.totalRevenue.toFixed(2)}
-                  </p>
-                </div>
-                <div 
-                  onClick={() => setActiveTab('orders')}
-                  style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', cursor: 'pointer', transition: 'all 0.3s ease' }}
-                  onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--primary-accent)'; e.currentTarget.style.transform = 'translateY(-4px)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--secondary-accent)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                >
-                  <h3 style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '2px' }}>Total Orders</h3>
-                  <p style={{ fontSize: '32px', color: 'var(--text-primary)', fontFamily: 'Playfair Display, serif' }}>
-                    {orders.length}
-                  </p>
-                  <span style={{ fontSize: '12px', color: 'var(--primary-accent)', marginTop: '8px', display: 'block' }}>Click to view →</span>
-                </div>
-                <div 
-                  onClick={() => setActiveTab('customers')}
-                  style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', cursor: 'pointer', transition: 'all 0.3s ease' }}
-                  onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--primary-accent)'; e.currentTarget.style.transform = 'translateY(-4px)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--secondary-accent)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                >
-                  <h3 style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '2px' }}>Total Customers</h3>
-                  <p style={{ fontSize: '32px', color: 'var(--text-primary)', fontFamily: 'Playfair Display, serif' }}>
-                    {customers.length}
-                  </p>
-                  <span style={{ fontSize: '12px', color: 'var(--primary-accent)', marginTop: '8px', display: 'block' }}>Click to view →</span>
-                </div>
-                <div 
-                  onClick={() => setActiveTab('reservations')}
-                  style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', cursor: 'pointer', transition: 'all 0.3s ease' }}
-                  onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--primary-accent)'; e.currentTarget.style.transform = 'translateY(-4px)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--secondary-accent)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                >
-                  <h3 style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '2px' }}>Reservations</h3>
-                  <p style={{ fontSize: '32px', color: 'var(--text-primary)', fontFamily: 'Playfair Display, serif' }}>
-                    {reservations.length}
-                  </p>
-                  <span style={{ fontSize: '12px', color: 'var(--primary-accent)', marginTop: '8px', display: 'block' }}>Click to view →</span>
-                </div>
-              </div>
-
-              <div className="dash-grid-2">
-                <div 
-                  onClick={() => setActiveTab('orders')}
-                  style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', cursor: 'pointer', transition: 'all 0.3s ease' }}
-                  onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--primary-accent)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--secondary-accent)'; }}
-                >
-                  <h3 style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    Order Status
-                    <span style={{ fontSize: '12px', color: 'var(--primary-accent)' }}>→</span>
-                  </h3>
-                  {Object.entries(analytics.orderStatusCounts).map(([status, count]) => (
-                    <div key={status} style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      padding: '8px 0', 
-                      borderBottom: '1px solid rgba(255,255,255,0.1)' 
-                    }}>
-                      <span style={{ textTransform: 'capitalize' }}>{status.replace('_', ' ')}</span>
-                      <span>{count}</span>
-                    </div>
-                  ))}
-                </div>
-                <div 
-                  onClick={() => setActiveTab('orders')}
-                  style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', cursor: 'pointer', transition: 'all 0.3s ease' }}
-                  onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--primary-accent)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--secondary-accent)'; }}
-                >
-                  <h3 style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    Popular Items
-                    <span style={{ fontSize: '12px', color: 'var(--primary-accent)' }}>→</span>
-                  </h3>
-                  {analytics.popularItems.map(([item, count], index) => (
-                    <div key={item} style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      padding: '8px 0', 
-                      borderBottom: '1px solid rgba(255,255,255,0.1)' 
-                    }}>
-                      <span>{item}</span>
-                      <span style={{ color: 'var(--primary-accent)' }}>{count} orders</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <OverviewTab 
+              analytics={analytics} 
+              ordersCount={orders.length} 
+              customersCount={customers.length} 
+              reservationsCount={reservations.length} 
+              setActiveTab={setActiveTab} 
+            />
           )}
 
           {activeTab === 'customers' && (
@@ -1191,69 +1114,7 @@ const removeAuthorizedEmail = async (id) => {
           )}
 
           {activeTab === 'reservations' && (
-            <div>
-              <h2 style={{ marginBottom: '24px' }}>Reservation Management</h2>
-              <div className="dash-table-wrapper">
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--primary-accent)' }}>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)', width: '40px' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedReservations.length === reservations.length && reservations.length > 0}
-                        onChange={(e) => { e.target.checked ? setSelectedReservations(reservations.map(r => r.id)) : setSelectedReservations([]); }}
-                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                      />
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Customer</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Email</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Date</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Time</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Party Size</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Status</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Special Requests</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reservations.length === 0 ? (
-                    <tr><td colSpan="9" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>No reservations to display</td></tr>
-                  ) : (
-                    reservations.map(res => (
-                      <tr key={res.id} style={{ borderBottom: '1px solid var(--secondary-accent)', background: selectedReservations.includes(res.id) ? 'rgba(231, 76, 60, 0.1)' : 'transparent' }}>
-                        <td style={{ padding: '12px' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={selectedReservations.includes(res.id)}
-                            onChange={(e) => { e.target.checked ? setSelectedReservations([...selectedReservations, res.id]) : setSelectedReservations(selectedReservations.filter(id => id !== res.id)); }}
-                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                          />
-                        </td>
-                        <td style={{ padding: '12px' }}>{res.name}</td>
-                        <td style={{ padding: '12px' }}>{res.email}</td>
-                        <td style={{ padding: '12px' }}>{res.date}</td>
-                        <td style={{ padding: '12px' }}>{res.time}</td>
-                        <td style={{ padding: '12px' }}>{res.party || 1}</td>
-                        <td style={{ padding: '12px' }}>{getStatusBadge(res.status)}</td>
-                        <td style={{ padding: '12px', maxWidth: '200px', fontSize: '14px' }}>{res.requests || 'None'}</td>
-                        <td style={{ padding: '12px' }}>
-                          <button onClick={() => handleStatus('reservations', res.id, 'confirmed')} style={{ margin: '2px', padding: '6px 12px', background: '#27ae60', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}>✓</button>
-                          <button onClick={() => handleStatus('reservations', res.id, 'cancelled')} style={{ margin: '2px', padding: '6px 12px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}>✗</button>
-                          <button onClick={() => confirmDelete('reservations', res.id)} style={{ margin: '2px', padding: '6px 12px', background: '#666', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}>🗑</button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-              </div>
-              {selectedReservations.length > 0 && (
-                <div style={{ marginTop: '16px', padding: '16px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid #e74c3c', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#e74c3c', fontWeight: '600' }}>{selectedReservations.length} reservation(s) selected</span>
-                  <button onClick={() => confirmDelete('reservations')} style={{ padding: '10px 20px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontWeight: '600', borderRadius: '6px' }}>Delete Selected</button>
-                </div>
-              )}
-            </div>
+            <ReservationsTab />
           )}
 
           {activeTab === 'requests' && (
@@ -1517,7 +1378,7 @@ const removeAuthorizedEmail = async (id) => {
             </div>
           )}
 
-          {activeTab === 'users' && (
+          {activeTab === 'users' && isSuperAdmin && (
             <div>
               <h2 style={{ marginBottom: '24px' }}>User Access Management</h2>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
