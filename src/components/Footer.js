@@ -31,6 +31,13 @@ function Footer() {
               <li>hello@foodlover.com</li>
             </ul>
           </div>
+          <div className="footer-admin">
+            <h4>Restaurant Management</h4>
+            <ul>
+              <li style={{ fontSize: '14px', opacity: 0.8 }}>For dashboard access:</li>
+              <li style={{ fontWeight: '600', color: 'var(--primary-accent)' }}>hamzaelsharkh@gmail.com</li>
+            </ul>
+          </div>
           <div className="footer-links">
             <h4>Links</h4>
             <ul>

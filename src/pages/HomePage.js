@@ -1,9 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, get, push, onValue } from 'firebase/database';
+import { useNavigate } from 'react-router-dom';
 
 function HomePage() {
   const menuCardsRef = useRef([]);
@@ -11,6 +13,40 @@ function HomePage() {
   const specialsRef = useRef([]);
   const ordersRef = useRef([]);
   const { user } = useAuth();
+  const { addToCart } = useCart();
+  const navigate = useNavigate();
+  const [activeCategory, setActiveCategory] = useState('all');
+// Real-time menu items from Firestore (admin CRUD will update these as well)
+  const [menuItems, setMenuItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadedImages, setLoadedImages] = useState({});
+  const [visibleCount, setVisibleCount] = useState(12);
+  const [menuPage, setMenuPage] = useState(1);
+
+  const handleImageLoad = (id) => {
+    setLoadedImages(prev => ({ ...prev, [id]: true }));
+  };
+
+  const displayedItems = menuItems
+    .filter(i => (activeCategory === 'all' || i.category === activeCategory) && i.is_available !== false && !i.is_hidden)
+    .slice(0, visibleCount);
+
+  const loadMoreItems = () => {
+    setVisibleCount(prev => prev + 12);
+  };
+
+  useEffect(() => {
+    menuItems.slice(0, visibleCount).forEach(item => {
+      if (item.image) {
+        const img = new Image();
+        img.src = item.image;
+      }
+    });
+  }, [menuItems]);
+
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [activeCategory]);
 
   useEffect(() => {
     const observerOptions = { threshold: 0.1 };
@@ -48,20 +84,48 @@ function HomePage() {
     return () => fadeObserver.disconnect();
   }, []);
 
-  const handleMenuFilter = (category) => {
-    const cards = document.querySelectorAll('.menu-card');
-    const tabs = document.querySelectorAll('.menu-tab');
-    
-    tabs.forEach(tab => tab.classList.remove('active'));
-    event.target.classList.add('active');
+// Real-time fetch of menu items from Firebase Firestore only
+  useEffect(() => {
+    const MENU_CACHE_KEY = 'foodlover_menu_cache';
+    const CACHE_EXPIRY = 1000 * 60 * 30; // 30 minutes
 
-    cards.forEach(card => {
-      if (category === 'all' || card.dataset.category === category) {
-        card.classList.remove('hidden');
-      } else {
-        card.classList.add('hidden');
+    // Load cached data instantly first
+    const cachedData = localStorage.getItem(MENU_CACHE_KEY);
+    if (cachedData) {
+      const { items, timestamp } = JSON.parse(cachedData);
+      if (Date.now() - timestamp < CACHE_EXPIRY && items.length > 0) {
+        setMenuItems(items);
+        setLoading(false);
       }
+    }
+
+    // Then fetch fresh data from RTDB
+    setLoading(true);
+    const menuRef = ref(db, 'menu');
+    const unsubscribe = onValue(menuRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const items = Object.entries(data).map(([id, value]) => ({ id, ...value }));
+        console.log('Fetching menu items from RTDB:', items.length);
+        setMenuItems(items);
+        localStorage.setItem(MENU_CACHE_KEY, JSON.stringify({
+          items,
+          timestamp: Date.now()
+        }));
+      } else {
+        setMenuItems([]);
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("RTDB Error:", error);
+      setMenuItems([]);
+      setLoading(false);
     });
+    return () => unsubscribe();
+  }, []);
+
+  const handleMenuFilter = (category) => {
+    setActiveCategory(category);
   };
 
   const handleOrder = (itemName) => {
@@ -84,18 +148,15 @@ function HomePage() {
       time: form.time.value,
       requests: form.requests.value,
       status: 'pending',
-      createdAt: serverTimestamp()
+      createdAt: Date.now()
     };
     
     try {
-      await addDoc(collection(db, 'reservations'), reservationData);
-      btn.textContent = 'Reservation Requested!';
-      btn.style.background = '#4CAF50';
+      await push(ref(db, 'reservations'), reservationData);
+      btn.textContent = 'Redirecting...';
       setTimeout(() => {
-        btn.textContent = 'Request Reservation';
-        btn.style.background = '';
-        form.reset();
-      }, 3000);
+        navigate('/admin');
+      }, 500);
     } catch (error) {
       console.error('Error:', error);
       btn.textContent = 'Error! Try again';
@@ -155,122 +216,95 @@ function HomePage() {
             <p className="section-tag">Our Menu</p>
             <h2 className="section-title">Culinary Creations</h2>
           </div>
-          <div className="menu-tabs">
-            <button className="menu-tab active" onClick={(e) => handleMenuFilter('all')}>All</button>
-            <button className="menu-tab" onClick={(e) => handleMenuFilter('starters')}>Starters</button>
-            <button className="menu-tab" onClick={(e) => handleMenuFilter('mains')}>Mains</button>
-            <button className="menu-tab" onClick={(e) => handleMenuFilter('desserts')}>Desserts</button>
-            <button className="menu-tab" onClick={(e) => handleMenuFilter('drinks')}>Drinks</button>
+          
+          <div style={{ background: 'linear-gradient(135deg, #D4A574 0%, #8B5A2B 100%)', padding: '30px', borderRadius: '12px', marginBottom: '30px', textAlign: 'center' }}>
+            <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: '32px', color: 'var(--bg-dark)', marginBottom: '10px' }}>🍽️ Tonight's Specials</h3>
+            <p style={{ color: 'var(--bg-dark)', opacity: 0.9, marginBottom: '20px', fontSize: '16px' }}>Exclusive dishes available only tonight. Reserve your table now!</p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
+              {menuItems.filter(i => i.category === 'specials' && i.is_available !== false && !i.is_hidden).slice(0, 4).map(item => (
+                <div key={item.id} style={{ background: 'rgba(255,255,255,0.9)', padding: '15px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '15px', minWidth: '250px' }}>
+                  <img src={item.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=80&q=50'} alt={item.name} loading="lazy" style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover', background: '#f0f0f0' }} />
+                  <div style={{ textAlign: 'left', flex: 1 }}>
+                    <div style={{ fontWeight: '600', color: 'var(--bg-dark)', fontSize: '14px' }}>{item.name}</div>
+                    <div style={{ color: '#D4A574', fontWeight: '700' }}>${item.price}</div>
+                  </div>
+                  <button 
+                    onClick={() => { addToCart({ name: item.name, price: item.price }); navigate('/cart'); }}
+                    style={{ background: '#D4A574', color: 'var(--bg-dark)', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}
+                  >
+                    Add
+                  </button>
+                </div>
+              ))}
+            </div>
+            <a href="#reservation" style={{ display: 'inline-block', marginTop: '20px', color: 'var(--bg-dark)', fontWeight: '600', textDecoration: 'underline' }}>Book a table to enjoy these specials →</a>
           </div>
-          <div className="menu-grid">
-            <div className="menu-card" data-category="starters">
-              <div className="menu-card-image">
-                <img src="https://images.unsplash.com/photo-1541014741259-de529411b96a?w=600&q=80" alt="Burrata" />
-              </div>
-              <div className="menu-card-content">
-                <div className="menu-card-header">
-                  <h4 className="menu-card-title">Burrata & Heirloom Tomatoes</h4>
-                  <span className="menu-card-price">$18</span>
+
+          <div className="menu-tabs">
+            <button className={`menu-tab ${activeCategory==='all'?'active':''}`} onClick={()=>setActiveCategory('all')}>All</button>
+<button className={`menu-tab ${activeCategory==='starters'?'active':''}`} onClick={()=>setActiveCategory('starters')}>Starters</button>
+            <button className={`menu-tab ${activeCategory==='mains'?'active':''}`} onClick={()=>setActiveCategory('mains')}>Mains</button>
+            <button className={`menu-tab ${activeCategory==='specials'?'active':''}`} onClick={()=>setActiveCategory('specials')}>Specials</button>
+            <button className={`menu-tab ${activeCategory==='desserts'?'active':''}`} onClick={()=>setActiveCategory('desserts')}>Desserts</button>
+            <button className={`menu-tab ${activeCategory==='drinks'?'active':''}`} onClick={()=>setActiveCategory('drinks')}>Drinks</button>
+          </div>
+<div className="menu-grid">
+            {loading ? (
+              Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="menu-card skeleton-card">
+                  <div className="skeleton-image pulse"></div>
+                  <div className="menu-card-content">
+                    <div className="skeleton-text pulse short"></div>
+                    <div className="skeleton-text pulse long"></div>
+                    <div className="skeleton-button pulse"></div>
+                  </div>
                 </div>
-                <p className="menu-card-desc">Creamy burrata, seasonal tomatoes, aged balsamic, basil oil</p>
+              ))
+) : displayedItems.length === 0 ? (
+              <div style={{ gridColumn: '1 / -1', padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                No items in this category.
               </div>
-            </div>
-            <div className="menu-card" data-category="starters">
-              <div className="menu-card-image">
-                <img src="https://images.unsplash.com/photo-1626200419199-391ae4be7a76?w=600&q=80" alt="Beef Tartar" />
-              </div>
-              <div className="menu-card-content">
-                <div className="menu-card-header">
-                  <h4 className="menu-card-title">Wagyu Beef Tartar</h4>
-                  <span className="menu-card-price">$24</span>
-                </div>
-                <p className="menu-card-desc">Hand-cut wagyu, quail egg, capers, truffle aioli</p>
-              </div>
-            </div>
-            <div className="menu-card" data-category="mains">
-              <div className="menu-card-image">
-                <img src="https://images.unsplash.com/photo-1544025162-d76694265947?w=600&q=80" alt="Ribeye" />
-              </div>
-              <div className="menu-card-content">
-                <div className="menu-card-header">
-                  <h4 className="menu-card-title">Dry-Aged Ribeye</h4>
-                  <span className="menu-card-price">$56</span>
-                </div>
-                <p className="menu-card-desc">45-day dry-aged, bone marrow butter, seasonal vegetables</p>
-              </div>
-            </div>
-            <div className="menu-card" data-category="mains">
-              <div className="menu-card-image">
-                <img src="https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&q=80" alt="Duck" />
-              </div>
-              <div className="menu-card-content">
-                <div className="menu-card-header">
-                  <h4 className="menu-card-title">Roasted Duck Breast</h4>
-                  <span className="menu-card-price">$42</span>
-                </div>
-                <p className="menu-card-desc">Cherry gastrique, sweet potato purée, baby bok choy</p>
-              </div>
-            </div>
-            <div className="menu-card" data-category="mains">
-              <div className="menu-card-image">
-                <img src="https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=600&q=80" alt="Salmon" />
-              </div>
-              <div className="menu-card-content">
-                <div className="menu-card-header">
-                  <h4 className="menu-card-title">Pan-Seared Salmon</h4>
-                  <span className="menu-card-price">$38</span>
-                </div>
-                <p className="menu-card-desc">Wild salmon, lemon beurre blanc, asparagus, dill</p>
-              </div>
-            </div>
-            <div className="menu-card" data-category="desserts">
-              <div className="menu-card-image">
-                <img src="https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=600&q=80" alt="Chocolate" />
-              </div>
-              <div className="menu-card-content">
-                <div className="menu-card-header">
-                  <h4 className="menu-card-title">Chocolate Fondant</h4>
-                  <span className="menu-card-price">$14</span>
-                </div>
-                <p className="menu-card-desc">Valrhona chocolate, vanilla bean ice cream</p>
-              </div>
-            </div>
-            <div className="menu-card" data-category="desserts">
-              <div className="menu-card-image">
-                <img src="https://images.unsplash.com/photo-1579306194692-6cdc97294a90?w=600&q=80" alt="Crème Brûlée" />
-              </div>
-              <div className="menu-card-content">
-                <div className="menu-card-header">
-                  <h4 className="menu-card-title">Crème Brûlée</h4>
-                  <span className="menu-card-price">$12</span>
-                </div>
-                <p className="menu-card-desc">Classic vanilla, caramelized sugar, fresh berries</p>
-              </div>
-            </div>
-            <div className="menu-card" data-category="drinks">
-              <div className="menu-card-image">
-                <img src="https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&q=80" alt="Cocktail" />
-              </div>
-              <div className="menu-card-content">
-                <div className="menu-card-header">
-                  <h4 className="menu-card-title">Ember Old Fashioned</h4>
-                  <span className="menu-card-price">$16</span>
-                </div>
-                <p className="menu-card-desc">Bourbon, smoked maple, angostura, orange peel</p>
-              </div>
-            </div>
-            <div className="menu-card" data-category="drinks">
-              <div className="menu-card-image">
-                <img src="https://images.unsplash.com/photo-1536935338788-846bb9981813?w=600&q=80" alt="Wine" />
-              </div>
-              <div className="menu-card-content">
-                <div className="menu-card-header">
-                  <h4 className="menu-card-title">House Wine Selection</h4>
-                  <span className="menu-card-price">$14</span>
-                </div>
-                <p className="menu-card-desc">Rotating selection of premium wines by the glass</p>
-              </div>
-            </div>
+            ) : (
+              <>
+                {displayedItems.map(item => (
+                  <div key={item.id} className="menu-card visible" data-category={item.category}>
+                    <div className="menu-card-image" style={{ background: '#f5f5f5', minHeight: '200px' }}>
+                      {item.image ? (
+                        <img 
+                          src={item.image} 
+                          alt={item.name} 
+                          loading="lazy"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            e.target.src = 'https://images.unsplash.com/photo-1541014741259-de529411b96a?w=400&q=60';
+                          }}
+                        />
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#999' }}>
+                          <span style={{ fontSize: '14px' }}>No Image</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="menu-card-content">
+                      <div className="menu-card-header">
+                        <h4 className="menu-card-title">{item.name}</h4>
+                        <span className="menu-card-price">${item.price}</span>
+                      </div>
+                      <p className="menu-card-desc">{item.description || ''}</p>
+                      <button className="menu-order-btn" onClick={() => { addToCart({ name: item.name, price: item.price }); navigate('/cart'); }}>Add to Order</button>
+                    </div>
+                  </div>
+                ))}
+                {menuItems.filter(i => (activeCategory === 'all' || i.category === activeCategory) && i.is_available !== false && !i.is_hidden).length > visibleCount && (
+                  <button 
+                    onClick={loadMoreItems}
+                    style={{ gridColumn: '1 / -1', padding: '20px', background: 'var(--bg-card)', border: '2px solid var(--primary-accent)', color: 'var(--primary-accent)', cursor: 'pointer', fontSize: '16px', fontWeight: '600', marginTop: '20px' }}
+                  >
+                    Load More Items ({menuItems.filter(i => (activeCategory === 'all' || i.category === activeCategory) && i.is_available !== false && !i.is_hidden).length - visibleCount} more)
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -340,7 +374,7 @@ function HomePage() {
         <div className="container">
           <div className="events-grid">
             <div className="events-image fade-in">
-              <img src="https://images.unsplash.com/photo-1550966871-3ed3c47e2ce2?w=800&q=80" alt="Private event dining" />
+              <img src="https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80" alt="Private event dining" />
             </div>
             <div className="events-content fade-in">
               <p className="section-tag">Private Dining</p>
@@ -355,6 +389,45 @@ function HomePage() {
               </ul>
               <a href="#reservation" className="btn-primary">Inquire Now</a>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="chefstable" className="chef-table" style={{ background: 'linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url(https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&q=80)', backgroundSize: 'cover', backgroundPosition: 'center', padding: '100px 0' }}>
+        <div className="container">
+          <div style={{ textAlign: 'center', maxWidth: '800px', margin: '0 auto' }}>
+            <p className="section-tag" style={{ color: 'var(--primary-accent)' }}>Exclusive Experience</p>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '48px', color: 'white', marginBottom: '20px' }}>Chef's Table</h2>
+            <p style={{ fontSize: '20px', color: '#ddd', marginBottom: '30px', lineHeight: '1.6' }}>
+              Tonight's Special tasting menu - An exclusive 7-course culinary journey crafted by our executive chef. 
+              Limited seats available for this intimate dining experience.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '30px', flexWrap: 'wrap' }}>
+              <div style={{ background: 'rgba(212,165,116,0.2)', padding: '20px 30px', borderRadius: '8px', border: '1px solid var(--primary-accent)' }}>
+                <div style={{ fontSize: '14px', color: '#aaa' }}>Price per person</div>
+                <div style={{ fontSize: '28px', color: 'var(--primary-accent)', fontWeight: '600' }}>$150</div>
+              </div>
+              <div style={{ background: 'rgba(212,165,116,0.2)', padding: '20px 30px', borderRadius: '8px', border: '1px solid var(--primary-accent)' }}>
+                <div style={{ fontSize: '14px', color: '#aaa' }}>Courses</div>
+                <div style={{ fontSize: '28px', color: 'var(--primary-accent)', fontWeight: '600' }}>7 Course</div>
+              </div>
+              <div style={{ background: 'rgba(212,165,116,0.2)', padding: '20px 30px', borderRadius: '8px', border: '1px solid var(--primary-accent)' }}>
+                <div style={{ fontSize: '14px', color: '#aaa' }}>Availability</div>
+                <div style={{ fontSize: '28px', color: '#e74c3c', fontWeight: '600' }}>Limited</div>
+              </div>
+            </div>
+            <button 
+              onClick={() => {
+                const form = document.getElementById('reservation-form');
+                if (form) {
+                  document.getElementById('requests').value = 'Chef\'s Table Reservation Request - 7-course tasting menu for ' + (document.getElementById('party')?.value || '2') + ' guests';
+                  form.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              style={{ padding: '16px 40px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', borderRadius: '4px', fontSize: '18px', fontWeight: '600', cursor: 'pointer' }}
+            >
+              Reserve Your Spot
+            </button>
           </div>
         </div>
       </section>
@@ -376,13 +449,13 @@ function HomePage() {
               <img src="https://images.unsplash.com/photo-1552566626-52f8b828add9?w=600&q=80" alt="Chef cooking" />
             </div>
             <div className="gallery-item">
-              <img src="https://images.unsplash.com/photo-1424847651672-bf20e4dafd5d?w=800&q=80" alt="Plated dish" />
+              <img src="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&q=80" alt="Plated dish" />
             </div>
             <div className="gallery-item">
-              <img src="https://images.unsplash.com/photo-1514933651103-005eeb06f14c?w=600&q=80" alt="Bar" />
+              <img src="https://images.unsplash.com/photo-1572116469696-31de0f17cc34?w=600&q=80" alt="Bar" />
             </div>
             <div className="gallery-item">
-              <img src="https://images.unsplash.com/photo-1550966871-3ed3c47e2ce2?w=600&q=80" alt="Outdoor dining" />
+              <img src="https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=600&q=80" alt="Outdoor dining" />
             </div>
           </div>
         </div>
@@ -394,7 +467,7 @@ function HomePage() {
             <p className="section-tag">Reservations</p>
             <h2 className="section-title">Book Your Table</h2>
           </div>
-          <form className="reservation-form fade-in" onSubmit={handleReservation}>
+          <form id="reservation-form" className="reservation-form fade-in" onSubmit={handleReservation}>
             <div className="form-row">
               <div className="form-group">
                 <input type="text" id="name" required placeholder=" " defaultValue={user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : ''} />

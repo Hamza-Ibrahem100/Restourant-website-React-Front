@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import { signOut, deleteUser } from 'firebase/auth';
 import { auth } from '../firebase';
 import LogoutModal from './LogoutModal';
@@ -10,6 +11,7 @@ function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const { user, showPopup } = useAuth();
+  const { cartCount } = useCart();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -100,9 +102,41 @@ function Nav() {
               </li>
             ) : (
               <li><Link to="/login">Login</Link></li>
-            )}
-          </ul>
-          <div 
+)}
+            </ul>
+            <button 
+              onClick={() => navigate('/cart')}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                position: 'relative',
+                padding: '8px',
+                marginRight: '16px'
+              }}
+            >
+              <span style={{ fontSize: '24px' }}>🛒</span>
+              {cartCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '0',
+                  right: '0',
+                  background: 'var(--primary-accent)',
+                  color: 'var(--bg-dark)',
+                  borderRadius: '50%',
+                  width: '20px',
+                  height: '20px',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 'bold'
+                }}>
+                  {cartCount}
+                </span>
+              )}
+            </button>
+            <div
             className={`hamburger ${isOpen ? 'active' : ''}`}
             onClick={() => setIsOpen(!isOpen)}
           >

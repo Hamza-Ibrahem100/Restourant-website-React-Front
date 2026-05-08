@@ -4,7 +4,8 @@ import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { createUserWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
-import { auth, googleProvider, facebookProvider } from '../firebase';
+import { auth, googleProvider, facebookProvider, db } from '../firebase';
+import { push, ref } from 'firebase/database';
 
 function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -78,6 +79,15 @@ function RegisterPage() {
       await updateProfile(userCredential.user, {
         displayName: `${formData.firstName} ${formData.lastName}`
       });
+      
+      await push(ref(db, 'users'), {
+        name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.email,
+        phone: formData.phone,
+        createdAt: Date.now(),
+        loyalty_points: 0
+      });
+      
       showPopup('Welcome! Account created successfully.');
       setTimeout(() => navigate('/'), 1500);
     } catch (error) {

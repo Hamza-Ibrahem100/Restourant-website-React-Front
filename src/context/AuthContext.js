@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { ref, get } from 'firebase/database';
 
 const ADMIN_EMAIL = 'hamzaelsharkh@gmail.com';
 
@@ -11,16 +12,32 @@ export function AuthProvider({ children }) {
   const [popup, setPopup] = useState(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const checkAdminStatus = async (email) => {
+      if (email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+        return true;
+      }
+      try {
+        const authSnap = await get(ref(db, 'authorized_users'));
+        const data = authSnap.val();
+        const authorizedEmails = data ? Object.values(data).map(item => item.email?.toLowerCase()) : [];
+        return authorizedEmails.includes(email?.toLowerCase());
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        return false;
+      }
+    };
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const email = firebaseUser.email;
+        const isAdmin = await checkAdminStatus(email);
         setUser({
           provider: firebaseUser.providerData[0]?.providerId || 'email',
           email: email,
           firstName: firebaseUser.displayName?.split(' ')[0] || 'User',
           lastName: firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
           uid: firebaseUser.uid,
-          isAdmin: email?.toLowerCase().includes(ADMIN_EMAIL.toLowerCase()) || false
+          isAdmin: isAdmin
         });
       } else {
         setUser(null);

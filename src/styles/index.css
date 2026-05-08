@@ -536,27 +536,55 @@ section {
 
 .menu {
   background: var(--bg-card);
+  padding: 80px 0;
+  position: relative;
+}
+
+.menu::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, var(--primary-accent), transparent);
+}
+
+.menu .section-header {
+  margin-bottom: 48px;
+}
+
+.menu .section-header .section-tag {
+  font-size: 16px;
+  letter-spacing: 4px;
+}
+
+.menu .section-header .section-title {
+  font-size: 56px;
+  margin-top: 12px;
 }
 
 .menu-tabs {
   display: flex;
   justify-content: center;
-  gap: 16px;
+  gap: 20px;
   margin-bottom: 48px;
   flex-wrap: wrap;
 }
 
 .menu-tab {
-  padding: 12px 32px;
+  padding: 14px 36px;
   background: transparent;
-  border: 1px solid var(--secondary-accent);
+  border: 2px solid var(--secondary-accent);
   color: var(--text-secondary);
   font-family: 'Crimson Text', serif;
-  font-size: 14px;
+  font-size: 15px;
   text-transform: uppercase;
   letter-spacing: 2px;
   cursor: pointer;
   transition: all 0.3s ease;
+  border-radius: 8px;
+  font-weight: 600;
 }
 
 .menu-tab:hover,
@@ -564,6 +592,8 @@ section {
   background: var(--primary-accent);
   border-color: var(--primary-accent);
   color: var(--bg-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(212, 165, 116, 0.4);
 }
 
 .menu-grid {
@@ -574,11 +604,18 @@ section {
 
 .menu-card {
   background: var(--bg-dark);
-  border: var(--border-accent);
+  border: 2px solid var(--secondary-accent);
+  border-radius: 12px;
   overflow: hidden;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: all 0.4s ease;
   opacity: 0;
   transform: translateY(30px);
+}
+
+.menu-card:hover {
+  transform: translateY(-12px);
+  border-color: var(--primary-accent);
+  box-shadow: 0 20px 60px rgba(212, 165, 116, 0.3);
 }
 
 .menu-card.visible {
@@ -593,23 +630,34 @@ section {
 }
 
 .menu-card-image {
-  height: 200px;
+  height: 280px;
   overflow: hidden;
+  position: relative;
+}
+
+.menu-card-image::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(transparent, var(--bg-dark));
 }
 
 .menu-card-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.4s ease;
+  transition: transform 0.5s ease, opacity 0.3s ease;
 }
 
 .menu-card:hover .menu-card-image img {
-  transform: scale(1.08);
+  transform: scale(1.1);
 }
 
 .menu-card-content {
-  padding: 24px;
+  padding: 28px;
 }
 
 .menu-card-header {
@@ -621,20 +669,23 @@ section {
 
 .menu-card-title {
   font-family: 'Playfair Display', serif;
-  font-size: 22px;
-  font-weight: 500;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .menu-card-price {
   font-family: 'Playfair Display', serif;
-  font-size: 22px;
+  font-size: 26px;
+  font-weight: 700;
   color: var(--primary-accent);
 }
 
 .menu-card-desc {
   font-size: 16px;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
+  margin-bottom: 16px;
 }
 
 .menu-card.hidden {
@@ -993,7 +1044,7 @@ section {
 
 .footer-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
   gap: 48px;
   margin-bottom: 48px;
 }
@@ -1878,4 +1929,39 @@ input:focus {
 .status-cancelled {
   background: rgba(244,67,54,0.2);
   color: #f44336;
+}
+
+/* Skeleton Loader Styles */
+.pulse {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: pulse-animation 1.5s infinite;
+}
+
+@keyframes pulse-animation {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-image { height: 200px; width: 100%; border-radius: 8px; }
+.skeleton-text { height: 15px; margin: 10px 0; border-radius: 4px; }
+.skeleton-text.short { width: 40%; }
+.skeleton-text.long { width: 80%; }
+.skeleton-button { height: 35px; width: 100%; border-radius: 4px; margin-top: 10px; }
+
+.skeleton-card {
+  background: var(--bg-card);
+  border: 1px solid var(--secondary-accent);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.skeleton-card .menu-card-content {
+  padding: 20px;
+}
+
+.skeleton-image {
+  height: 280px !important;
+  width: 100%;
+  border-radius: 0;
 }
