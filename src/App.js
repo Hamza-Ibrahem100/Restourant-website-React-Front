@@ -26,7 +26,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isLoggedIn && currentPath !== '/register' && currentPath !== '/admin') {
+    const publicPaths = ['/register', '/cart', '/login'];
+    const isPublicPath = publicPaths.includes(currentPath);
+    const isHome = currentPath === '/';
+    
+    // Allow public access to home, login, register, cart
+    if (!isLoggedIn && !isPublicPath && !isHome) {
       navigate('/login');
     }
     if (isLoggedIn && (currentPath === '/login' || currentPath === '/register')) {

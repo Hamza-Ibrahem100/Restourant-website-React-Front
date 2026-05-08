@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import { db, storage } from '../firebase';
@@ -66,12 +66,162 @@ function Dashboard() {
   const [deleteItemId, setDeleteItemId] = useState(null);
   const [deleteType, setDeleteType] = useState(null);
 
+  const prevOrderCount = useRef(0);
+  const prevResCount = useRef(0);
+  const soundEnabled = useRef(true);
+
+  const playNotificationSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g);
+      g.connect(ctx.destination);
+      
+      o.type = 'sine';
+      g.gain.setValueAtTime(0.3, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+      
+      // Two-tone chime: C5 then E5
+      o.frequency.setValueAtTime(523.25, ctx.currentTime);
+      o.frequency.setValueAtTime(659.25, ctx.currentTime + 0.15);
+      
+      o.start(ctx.currentTime);
+      o.stop(ctx.currentTime + 0.6);
+    } catch (e) {
+      // Audio not supported
+    }
+  }, []);
+
+  const calculateAnalytics = (ordersData) => {
+    const totalRevenue = ordersData
+      .filter(o => o.status === 'completed')
+      .reduce((sum, o) => sum + (o.total_price || o.total || 0), 0);
+
+    const popularItems = {};
+    ordersData.forEach(order => {
+      (order.items || []).forEach(item => {
+        const itemName = item.name || item.item_id;
+        popularItems[itemName] = (popularItems[itemName] || 0) + item.quantity;
+      });
+    });
+
+    const sortedPopular = Object.entries(popularItems)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    const orderStatusCounts = ordersData.reduce((acc, order) => {
+      const status = order.status || 'pending';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {});
+
+    setAnalytics({ totalRevenue, popularItems: sortedPopular, orderStatusCounts });
+  };
+
   useEffect(() => {
     fetchAllData();
-    setupRealTimeListeners();
+    
+    const ordersRef = ref(db, 'orders');
+    const ordersUnsubscribe = onValue(ordersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const orders = snapshot.val();
+        const orderList = Object.entries(orders).map(([id, data]) => ({ id, ...data }));
+        setOrders(orderList);
+        calculateAnalytics(orderList);
+        
+        // Detect new order and play sound + notification
+        if (prevOrderCount.current > 0 && orderList.length > prevOrderCount.current) {
+          if (soundEnabled.current) playNotificationSound();
+          const latestOrder = orderList[orderList.length - 1];
+          setNotifications(prev => [{
+            id: Date.now(),
+            type: 'new_order',
+            message: `New Order from ${latestOrder.customerName || 'Guest'} - $${(latestOrder.total_price || latestOrder.total || 0).toFixed(2)}`,
+            timestamp: new Date(),
+            read: false
+          }, ...prev]);
+          setUnreadCount(prev => prev + 1);
+        }
+        prevOrderCount.current = orderList.length;
+      } else {
+        setOrders([]);
+        prevOrderCount.current = 0;
+      }
+    }, (error) => console.error('Orders listener error:', error));
+
+    const reservationsRef = ref(db, 'reservations');
+    const reservationsUnsubscribe = onValue(reservationsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const reservations = snapshot.val();
+        const resList = Object.entries(reservations).map(([id, data]) => ({ id, ...data }));
+        setReservations(resList);
+        
+        // Detect new reservation and play sound + notification
+        if (prevResCount.current > 0 && resList.length > prevResCount.current) {
+          if (soundEnabled.current) playNotificationSound();
+          const latestRes = resList[resList.length - 1];
+          setNotifications(prev => [{
+            id: Date.now(),
+            type: 'new_reservation',
+            message: `New Reservation from ${latestRes.name} for ${latestRes.party || 1} guests on ${latestRes.date}`,
+            timestamp: new Date(),
+            read: false
+          }, ...prev]);
+          setUnreadCount(prev => prev + 1);
+        }
+        prevResCount.current = resList.length;
+      } else {
+        setReservations([]);
+        prevResCount.current = 0;
+      }
+    }, (error) => console.error('Reservations listener error:', error));
+
+    // Real-time listener for menu items
+    const menuRef = ref(db, 'menu');
+    const menuUnsubscribe = onValue(menuRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const menu = snapshot.val();
+        const menuList = Object.entries(menu).map(([id, data]) => ({ id, ...data }));
+        setMenuItems(menuList);
+        localStorage.setItem('foodlover_menu_cache', JSON.stringify({
+          items: menuList,
+          timestamp: Date.now()
+        }));
+      }
+    }, (error) => console.error('Menu listener error:', error));
+
+    // Real-time listener for users/customers
+    const usersRef = ref(db, 'users');
+    const usersUnsubscribe = onValue(usersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const users = snapshot.val();
+        const usersList = Object.entries(users).map(([id, data]) => ({ id, ...data }));
+        setCustomers(usersList);
+      }
+    }, (error) => console.error('Users listener error:', error));
+
+    // Real-time listener for authorized users
+    const authRef = ref(db, 'authorized_users');
+    const authUnsubscribe = onValue(authRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const authUsers = snapshot.val();
+        const authList = Object.entries(authUsers).map(([id, data]) => ({ id, ...data }));
+        setAuthorizedEmails(authList);
+      }
+    }, (error) => console.error('Auth users listener error:', error));
+
+    return () => {
+      ordersUnsubscribe();
+      reservationsUnsubscribe();
+      menuUnsubscribe();
+      usersUnsubscribe();
+      authUnsubscribe();
+    };
   }, []);
 
   const fetchAllData = async () => {
+    console.log('fetchAllData called');
     const MENU_CACHE_KEY = 'foodlover_menu_cache';
     const CACHE_EXPIRY = 1000 * 60 * 30;
 
@@ -86,6 +236,7 @@ function Dashboard() {
       }
 
       // Fetch from Realtime Database
+      console.log('Fetching from RTDB...');
       const [reservationsSnap, customersSnap, ordersSnap, menuSnap, authEmailsSnap] = await Promise.all([
         get(ref(db, 'reservations')),
         get(ref(db, 'users')),
@@ -93,6 +244,13 @@ function Dashboard() {
         get(ref(db, 'menu')),
         get(ref(db, 'authorized_users'))
       ]);
+
+      console.log('RTDB data received:',
+        'reservations:', reservationsSnap.exists() ? Object.keys(reservationsSnap.val()).length : 0,
+        'users:', customersSnap.exists() ? Object.keys(customersSnap.val()).length : 0,
+        'orders:', ordersSnap.exists() ? Object.keys(ordersSnap.val()).length : 0,
+        'menu:', menuSnap.exists() ? Object.keys(menuSnap.val()).length : 0
+      );
 
       const resData = reservationsSnap.exists() ? Object.entries(reservationsSnap.val()).map(([id, data]) => ({ id, ...data })) : [];
       const custData = customersSnap.exists() ? Object.entries(customersSnap.val()).map(([id, data]) => ({ id, ...data })) : [];
@@ -144,92 +302,9 @@ const removeAuthorizedEmail = async (id) => {
         console.error('Error removing authorized email:', error);
       }
     }
-  };
+};
 
-  const setupRealTimeListeners = () => {
-    let lastOrderCount = 0;
-    let lastResCount = 0;
-
-    const ordersUnsubscribe = onValue(ref(db, 'orders'), (snapshot) => {
-      if (snapshot.exists()) {
-        const orders = snapshot.val();
-        const currentCount = Object.keys(orders).length;
-        if (currentCount > lastOrderCount && lastOrderCount > 0) {
-          const latestOrder = Object.values(orders).pop();
-          const notification = {
-            id: Date.now(),
-            type: 'new_order',
-            message: `New Order from ${latestOrder.customerName || 'Guest'} - $${(latestOrder.total_price || latestOrder.total || 0).toFixed(2)}`,
-            timestamp: new Date(),
-            read: false
-          };
-          setNotifications(prev => [notification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-        }
-        lastOrderCount = currentCount;
-        setOrders(Object.entries(orders).map(([id, data]) => ({ id, ...data })));
-      } else {
-        lastOrderCount = 0;
-        setOrders([]);
-      }
-    });
-
-    const reservationsUnsubscribe = onValue(ref(db, 'reservations'), (snapshot) => {
-      if (snapshot.exists()) {
-        const reservations = snapshot.val();
-        const currentCount = Object.keys(reservations).length;
-        if (currentCount > lastResCount && lastResCount > 0) {
-          const latestRes = Object.values(reservations).pop();
-          const notification = {
-            id: Date.now(),
-            type: 'new_reservation',
-            message: `New Reservation from ${latestRes.name} for ${latestRes.party || 1} guests on ${latestRes.date}`,
-            timestamp: new Date(),
-            read: false
-          };
-          setNotifications(prev => [notification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-        }
-        lastResCount = currentCount;
-        setReservations(Object.entries(reservations).map(([id, data]) => ({ id, ...data })));
-      } else {
-        lastResCount = 0;
-        setReservations([]);
-      }
-    });
-
-    return () => {
-      ordersUnsubscribe();
-      reservationsUnsubscribe();
-    };
-  };
-
-  const calculateAnalytics = (ordersData) => {
-    const totalRevenue = ordersData
-      .filter(o => o.status === 'completed')
-      .reduce((sum, o) => sum + (o.total_price || o.total || 0), 0);
-
-    const popularItems = {};
-    ordersData.forEach(order => {
-      (order.items || []).forEach(item => {
-        const itemName = item.name || item.item_id;
-        popularItems[itemName] = (popularItems[itemName] || 0) + item.quantity;
-      });
-    });
-    const sortedPopular = Object.entries(popularItems)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-
-    const orderStatusCounts = ordersData.reduce((acc, order) => {
-      const status = order.status || 'pending';
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {});
-
-    setAnalytics({ totalRevenue, popularItems: sortedPopular, orderStatusCounts });
-  };
-
-const handleStatus = async (collectionName, id, newStatus) => {
+  const handleStatus = async (collectionName, id, newStatus) => {
     try {
       await update(ref(db, `${collectionName}/${id}`), { 
         status: newStatus,
@@ -1017,6 +1092,206 @@ const handleStatus = async (collectionName, id, newStatus) => {
                   >
                     Delete Selected
                   </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'orders' && (
+            <div>
+              <h2 style={{ marginBottom: '24px' }}>Order Management</h2>
+              {orders.length === 0 && (
+                <div style={{ padding: '24px', border: '2px solid var(--primary-accent)', borderRadius: '8px', marginBottom: 24, background: 'rgba(212, 165, 116, 0.1)', textAlign: 'center' }}>
+                  <p style={{ margin: '0 0 16px 0', color: 'var(--text-primary)', fontSize: '18px', fontWeight: '600' }}>No orders found!</p>
+                  <p style={{ margin: '0 0 16px 0', color: 'var(--text-secondary)' }}>Click below to add sample order data.</p>
+                  <button onClick={seedOrdersFromUI} style={{ padding: '14px 32px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>Add Sample Orders</button>
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+                <div style={{ background: 'var(--bg-card)', padding: '20px', border: '1px solid var(--secondary-accent)', borderRadius: '8px' }}>
+                  <h3 style={{ color: 'var(--primary-accent)', marginBottom: '16px', fontSize: '18px' }}>Order Status Overview</h3>
+                  {Object.entries(analytics.orderStatusCounts).map(([status, count]) => (
+                    <div key={status} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <span style={{ textTransform: 'capitalize', color: 'var(--text-secondary)' }}>{status.replace('_', ' ')}</span>
+                      <span style={{ fontWeight: 'bold', color: 'var(--primary-accent)' }}>{count}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0 0', marginTop: '8px', borderTop: '2px solid var(--primary-accent)' }}>
+                    <span style={{ fontWeight: 'bold' }}>Total Orders</span>
+                    <span style={{ fontWeight: 'bold', color: 'var(--primary-accent)', fontSize: '18px' }}>{orders.length}</span>
+                  </div>
+                </div>
+                <div style={{ background: 'var(--bg-card)', padding: '20px', border: '1px solid var(--secondary-accent)', borderRadius: '8px' }}>
+                  <h3 style={{ color: 'var(--primary-accent)', marginBottom: '16px', fontSize: '18px' }}>Popular Items</h3>
+                  {analytics.popularItems.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)' }}>No order data yet</p>
+                  ) : (
+                    analytics.popularItems.map(([item, count], index) => (
+                      <div key={item} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>#{index + 1} {item}</span>
+                        <span style={{ fontWeight: 'bold', color: 'var(--primary-accent)' }}>{count} orders</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--primary-accent)' }}>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)', width: '40px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedOrders.length === orders.length && orders.length > 0}
+                        onChange={(e) => { e.target.checked ? setSelectedOrders(orders.map(o => o.id)) : setSelectedOrders([]); }}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Order ID</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Customer</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Phone</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Table #</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Items</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Total</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Type</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Status</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map(order => (
+                    <tr key={order.id} style={{ borderBottom: '1px solid var(--secondary-accent)', background: selectedOrders.includes(order.id) ? 'rgba(231, 76, 60, 0.1)' : 'transparent' }}>
+                      <td style={{ padding: '12px' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedOrders.includes(order.id)}
+                          onChange={(e) => { e.target.checked ? setSelectedOrders([...selectedOrders, order.id]) : setSelectedOrders(selectedOrders.filter(id => id !== order.id)); }}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                      </td>
+                      <td style={{ padding: '12px' }}>#{order.id?.slice(0, 8)}</td>
+                      <td style={{ padding: '12px' }}>{order.customerName || 'Guest'}</td>
+                      <td style={{ padding: '12px' }}>{order.phone || 'N/A'}</td>
+                      <td style={{ padding: '12px' }}>{order.tableNumber || 'N/A'}</td>
+                      <td style={{ padding: '12px', maxWidth: '200px' }}>
+                        {(order.items || []).map((item, idx) => (
+                          <div key={idx} style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                            {item.quantity}x {item.name} (${(item.price * item.quantity).toFixed(2)})
+                          </div>
+                        ))}
+                      </td>
+                      <td style={{ padding: '12px', fontWeight: 'bold', color: 'var(--primary-accent)' }}>${(order.total_price || order.total || 0).toFixed(2)}</td>
+                      <td style={{ padding: '12px', textTransform: 'capitalize' }}>{order.orderType || 'N/A'}</td>
+                      <td style={{ padding: '12px' }}>{getStatusBadge(order.status)}</td>
+                      <td style={{ padding: '12px' }}>
+                        <button onClick={() => handleStatus('orders', order.id, 'pending')} style={{ margin: '2px', padding: '4px 8px', background: '#95a5a6', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px' }} title="Pending">⌛</button>
+                        <button onClick={() => handleStatus('orders', order.id, 'preparing')} style={{ margin: '2px', padding: '4px 8px', background: '#f39c12', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px' }} title="Preparing">👨‍🍳</button>
+                        <button onClick={() => handleStatus('orders', order.id, 'ready')} style={{ margin: '2px', padding: '4px 8px', background: '#27ae60', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px' }} title="Ready">✅</button>
+                        <button onClick={() => handleStatus('orders', order.id, 'completed')} style={{ margin: '2px', padding: '4px 8px', background: '#2ecc71', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px' }} title="Completed">✔</button>
+                        <button onClick={() => confirmDelete('orders', order.id)} style={{ margin: '2px', padding: '4px 8px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px' }} title="Delete">🗑</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {selectedOrders.length > 0 && (
+                <div style={{ marginTop: '16px', padding: '16px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid #e74c3c', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#e74c3c', fontWeight: '600' }}>{selectedOrders.length} order(s) selected</span>
+                  <button onClick={() => confirmDelete('orders')} style={{ padding: '10px 20px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontWeight: '600', borderRadius: '6px' }}>Delete Selected</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'reservations' && (
+            <div>
+              <h2 style={{ marginBottom: '24px' }}>Reservation Management</h2>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--primary-accent)' }}>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)', width: '40px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedReservations.length === reservations.length && reservations.length > 0}
+                        onChange={(e) => { e.target.checked ? setSelectedReservations(reservations.map(r => r.id)) : setSelectedReservations([]); }}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Customer</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Email</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Date</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Time</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Party Size</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Status</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Special Requests</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reservations.length === 0 ? (
+                    <tr><td colSpan="9" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>No reservations to display</td></tr>
+                  ) : (
+                    reservations.map(res => (
+                      <tr key={res.id} style={{ borderBottom: '1px solid var(--secondary-accent)', background: selectedReservations.includes(res.id) ? 'rgba(231, 76, 60, 0.1)' : 'transparent' }}>
+                        <td style={{ padding: '12px' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={selectedReservations.includes(res.id)}
+                            onChange={(e) => { e.target.checked ? setSelectedReservations([...selectedReservations, res.id]) : setSelectedReservations(selectedReservations.filter(id => id !== res.id)); }}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                        </td>
+                        <td style={{ padding: '12px' }}>{res.name}</td>
+                        <td style={{ padding: '12px' }}>{res.email}</td>
+                        <td style={{ padding: '12px' }}>{res.date}</td>
+                        <td style={{ padding: '12px' }}>{res.time}</td>
+                        <td style={{ padding: '12px' }}>{res.party || 1}</td>
+                        <td style={{ padding: '12px' }}>{getStatusBadge(res.status)}</td>
+                        <td style={{ padding: '12px', maxWidth: '200px', fontSize: '14px' }}>{res.requests || 'None'}</td>
+                        <td style={{ padding: '12px' }}>
+                          <button onClick={() => handleStatus('reservations', res.id, 'confirmed')} style={{ margin: '2px', padding: '6px 12px', background: '#27ae60', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}>✓</button>
+                          <button onClick={() => handleStatus('reservations', res.id, 'cancelled')} style={{ margin: '2px', padding: '6px 12px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}>✗</button>
+                          <button onClick={() => confirmDelete('reservations', res.id)} style={{ margin: '2px', padding: '6px 12px', background: '#666', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}>🗑</button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+              {selectedReservations.length > 0 && (
+                <div style={{ marginTop: '16px', padding: '16px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid #e74c3c', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#e74c3c', fontWeight: '600' }}>{selectedReservations.length} reservation(s) selected</span>
+                  <button onClick={() => confirmDelete('reservations')} style={{ padding: '10px 20px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontWeight: '600', borderRadius: '6px' }}>Delete Selected</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'requests' && (
+            <div>
+              <h2 style={{ marginBottom: '24px' }}>Customer Requests</h2>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                All special requests from reservations are displayed here for restaurant staff.
+              </p>
+              {reservations.filter(res => res.requests && res.requests.trim() !== '').length === 0 ? (
+                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '48px' }}>No customer requests at this time.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  {reservations.filter(res => res.requests && res.requests.trim() !== '').map(res => (
+                    <div key={res.id} style={{ background: 'var(--bg-card)', padding: '20px', border: '1px solid var(--secondary-accent)', borderRadius: '8px', borderLeft: '4px solid var(--primary-accent)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <strong>{res.name}</strong>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>{res.date} at {res.time}</span>
+                      </div>
+                      <p style={{ margin: '0 0 8px 0', fontStyle: 'italic', color: 'var(--primary-accent)' }}>"{res.requests}"</p>
+                      <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                        <span>Party: {res.party || 1}</span>
+                        <span>Email: {res.email}</span>
+                        <span>Phone: {res.phone || 'N/A'}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

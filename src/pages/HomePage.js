@@ -143,22 +143,35 @@ function HomePage() {
       name: form.name.value,
       email: form.email.value,
       phone: form.phone.value,
-      party: form.party.value,
+      party: parseInt(form.party.value),
       date: form.date.value,
       time: form.time.value,
-      requests: form.requests.value,
+      requests: form.requests.value || '',
       status: 'pending',
       createdAt: Date.now()
     };
     
+    console.log('Saving reservation:', reservationData);
+    
     try {
-      await push(ref(db, 'reservations'), reservationData);
-      btn.textContent = 'Redirecting...';
-      setTimeout(() => {
-        navigate('/admin');
-      }, 500);
+      const resRef = await push(ref(db, 'reservations'), reservationData);
+      console.log('Reservation saved with ID:', resRef.key);
+      btn.textContent = 'Success!';
+      alert('Reservation request submitted! We will confirm via email.');
+      form.reset();
+      if (user) {
+        form.name.value = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+        form.email.value = user.email || '';
+      }
     } catch (error) {
       console.error('Error:', error);
+      let errorMessage = 'Failed to submit reservation. Please try again.';
+      if (error.code === 'PERMISSION_DENIED') {
+        errorMessage = 'Unable to save reservation. Please make sure you are logged in or try again.';
+      } else if (error.message) {
+        errorMessage = `Error: ${error.message}`;
+      }
+      alert(errorMessage);
       btn.textContent = 'Error! Try again';
     }
   };

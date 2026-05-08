@@ -53,28 +53,46 @@ function CartPage() {
       return;
     }
 
+    if (cart.length === 0) {
+      alert('Your cart is empty');
+      return;
+    }
+
     setPlacingOrder(true);
+    console.log('Placing order with data:', { customerInfo, cart, cartTotal, orderType });
+    
     try {
-      await push(ref(db, 'orders'), {
+      const orderData = {
         customerName: customerInfo.name,
         phone: customerInfo.phone,
         tableNumber: orderType === 'dine-in' ? customerInfo.tableNumber || null : null,
         items: cart.map(item => ({
           name: item.name,
-          price: item.price,
-          quantity: item.quantity
+          price: Number(item.price),
+          quantity: Number(item.quantity)
         })),
-        total: cartTotal,
+        total: Number(cartTotal),
         status: 'pending',
         orderType: orderType,
         createdAt: Date.now()
-      });
+      };
+      
+      console.log('Sending to RTDB:', orderData);
+      const orderRef = await push(ref(db, 'orders'), orderData);
+      console.log('Order saved with ID:', orderRef.key);
+      
       alert('Order placed successfully! We will contact you soon.');
       clearCart();
       navigate('/');
     } catch (error) {
       console.error('Error placing order:', error);
-      alert('Failed to place order. Please try again.');
+      let errorMessage = 'Failed to place order. Please try again.';
+      if (error.code === 'PERMISSION_DENIED') {
+        errorMessage = 'Unable to save order. Please make sure you are logged in or try again.';
+      } else if (error.message) {
+        errorMessage = `Error: ${error.message}`;
+      }
+      alert(errorMessage);
     } finally {
       setPlacingOrder(false);
     }
