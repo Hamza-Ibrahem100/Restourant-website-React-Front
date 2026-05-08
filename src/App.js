@@ -39,7 +39,7 @@ function App() {
     }
   }, [isLoggedIn, navigate, currentPath]);
 
-  const isAdmin = user?.email === 'hamzaelsharkh@gmail.com';
+  const isAdmin = user?.isAdmin;
 
   return (
     <CartProvider>

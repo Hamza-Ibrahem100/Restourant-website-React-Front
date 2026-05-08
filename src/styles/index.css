@@ -1965,3 +1965,170 @@ input:focus {
   width: 100%;
   border-radius: 0;
 }
+
+/* ===== Dashboard Mobile Responsive ===== */
+
+.dash-container {
+  padding: 100px 24px 60px;
+  min-height: 100vh;
+}
+
+.dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.dash-header h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 36px;
+}
+
+.dash-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--secondary-accent);
+  padding-bottom: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+
+.dash-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.dash-tab {
+  padding: 10px 20px;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--primary-accent);
+  cursor: pointer;
+  text-transform: capitalize;
+  font-weight: 400;
+  font-family: 'Crimson Text', serif;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.dash-tab.active {
+  background: var(--primary-accent);
+  color: var(--bg-dark);
+  font-weight: 600;
+}
+
+.dash-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.dash-grid-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+.dash-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 16px;
+}
+
+.dash-table-wrapper table {
+  min-width: 700px;
+}
+
+.dash-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.dash-reports-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+@media (max-width: 768px) {
+  .dash-container {
+    padding: 90px 12px 40px;
+  }
+
+  .dash-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .dash-header h1 {
+    font-size: 26px;
+  }
+
+  .dash-header > div {
+    width: 100%;
+  }
+
+  .dash-header button {
+    width: 100%;
+    text-align: center;
+  }
+
+  .dash-grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-grid-stats {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .dash-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-reports-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-tabs {
+    gap: 6px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+  }
+
+  .dash-tab {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dash-container {
+    padding: 80px 8px 30px;
+  }
+
+  .dash-header h1 {
+    font-size: 22px;
+  }
+
+  .dash-tab {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .dash-tabs {
+    gap: 4px;
+  }
+}

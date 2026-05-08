@@ -278,18 +278,19 @@ function Dashboard() {
     }
   };
 
-  const addAuthorizedEmail = async () => {
+const addAuthorizedEmail = async () => {
     if (!newAuthorizedEmail.trim()) return;
     try {
-      const newRef = push(ref(db, 'authorized_users'));
-      await set(newRef, {
+      await push(ref(db, 'authorized_users'), {
         email: newAuthorizedEmail.trim().toLowerCase(),
         addedAt: Date.now()
       });
       setNewAuthorizedEmail('');
       fetchAllData();
+      alert('User added successfully! They can now access the dashboard.');
     } catch (error) {
       console.error('Error adding authorized email:', error);
+      alert('Error adding user: ' + error.message);
     }
   };
 
@@ -298,11 +299,13 @@ const removeAuthorizedEmail = async (id) => {
       try {
         await remove(ref(db, `authorized_users/${id}`));
         fetchAllData();
+        alert('User removed successfully.');
       } catch (error) {
         console.error('Error removing authorized email:', error);
+        alert('Error removing user: ' + error.message);
       }
     }
-};
+  };
 
   const handleStatus = async (collectionName, id, newStatus) => {
     try {
@@ -772,10 +775,10 @@ const removeAuthorizedEmail = async (id) => {
   return (
     <>
       <Nav />
-      <div style={{ padding: '100px 24px 60px', minHeight: '100vh' }}>
+      <div className="dash-container">
         <div className="container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-            <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: '36px' }}>Restaurant Dashboard</h1>
+          <div className="dash-header">
+            <h1>Restaurant Dashboard</h1>
             <div style={{ position: 'relative' }}>
               <button
                 onClick={() => setActiveTab('notifications')}
@@ -805,27 +808,12 @@ const removeAuthorizedEmail = async (id) => {
             </div>
           </div>
 
-          <div style={{ 
-            display: 'flex', 
-            gap: '16px', 
-            marginBottom: '32px', 
-            flexWrap: 'wrap', 
-            borderBottom: '1px solid var(--secondary-accent)', 
-            paddingBottom: '16px' 
-          }}>
+          <div className="dash-tabs">
             {['overview', 'customers', 'orders', 'reservations', 'requests', 'menu', 'users', 'analytics', 'reports', 'notifications'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: '10px 20px',
-                  background: activeTab === tab ? 'var(--primary-accent)' : 'transparent',
-                  color: activeTab === tab ? 'var(--bg-dark)' : 'var(--text-primary)',
-                  border: '1px solid var(--primary-accent)',
-                  cursor: 'pointer',
-                  textTransform: 'capitalize',
-                  fontWeight: activeTab === tab ? '600' : '400'
-                }}
+                className={`dash-tab${activeTab === tab ? ' active' : ''}`}
               >
                 {tab === 'users' ? 'User Access' : tab}
               </button>
@@ -834,12 +822,7 @@ const removeAuthorizedEmail = async (id) => {
 
           {activeTab === 'overview' && (
             <div>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                gap: '24px', 
-                marginBottom: '48px' 
-              }}>
+              <div className="dash-grid-stats">
                 <div style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)' }}>
                   <h3 style={{ color: 'var(--text-secondary)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '2px' }}>Total Revenue</h3>
                   <p style={{ fontSize: '32px', color: 'var(--primary-accent)', fontFamily: 'Playfair Display, serif' }}>
@@ -884,7 +867,7 @@ const removeAuthorizedEmail = async (id) => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+              <div className="dash-grid-2">
                 <div 
                   onClick={() => setActiveTab('orders')}
                   style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', cursor: 'pointer', transition: 'all 0.3s ease' }}
@@ -946,7 +929,7 @@ const removeAuthorizedEmail = async (id) => {
               
               <div style={{ background: 'var(--bg-card)', padding: '24px', marginBottom: '32px', border: '1px solid var(--secondary-accent)' }}>
                 <h3 style={{ marginBottom: '16px' }}>{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div className="dash-form-grid">
                   <input
                     type="text"
                     placeholder="Customer Name"
@@ -968,7 +951,7 @@ const removeAuthorizedEmail = async (id) => {
                     style={{ padding: '12px', background: 'var(--bg-dark)', border: '1px solid var(--secondary-accent)', color: 'var(--text-primary)', fontSize: '16px' }}
                   />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div className="dash-form-grid">
                   <input
                     type="text"
                     placeholder="Phone"
@@ -1014,6 +997,7 @@ const removeAuthorizedEmail = async (id) => {
                 </div>
               </div>
 
+              <div className="dash-table-wrapper">
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--primary-accent)' }}>
@@ -1081,6 +1065,7 @@ const removeAuthorizedEmail = async (id) => {
                   ))}
                 </tbody>
               </table>
+              </div>
               {selectedUsers.length > 0 && (
                 <div style={{ marginTop: '16px', padding: '16px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid #e74c3c', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ color: '#e74c3c', fontWeight: '600' }}>
@@ -1108,7 +1093,7 @@ const removeAuthorizedEmail = async (id) => {
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+              <div className="dash-reports-grid">
                 <div style={{ background: 'var(--bg-card)', padding: '20px', border: '1px solid var(--secondary-accent)', borderRadius: '8px' }}>
                   <h3 style={{ color: 'var(--primary-accent)', marginBottom: '16px', fontSize: '18px' }}>Order Status Overview</h3>
                   {Object.entries(analytics.orderStatusCounts).map(([status, count]) => (
@@ -1136,7 +1121,7 @@ const removeAuthorizedEmail = async (id) => {
                   )}
                 </div>
               </div>
-
+              <div className="dash-table-wrapper">
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--primary-accent)' }}>
@@ -1195,6 +1180,7 @@ const removeAuthorizedEmail = async (id) => {
                   ))}
                 </tbody>
               </table>
+              </div>
               {selectedOrders.length > 0 && (
                 <div style={{ marginTop: '16px', padding: '16px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid #e74c3c', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ color: '#e74c3c', fontWeight: '600' }}>{selectedOrders.length} order(s) selected</span>
@@ -1207,6 +1193,7 @@ const removeAuthorizedEmail = async (id) => {
           {activeTab === 'reservations' && (
             <div>
               <h2 style={{ marginBottom: '24px' }}>Reservation Management</h2>
+              <div className="dash-table-wrapper">
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--primary-accent)' }}>
@@ -1259,6 +1246,7 @@ const removeAuthorizedEmail = async (id) => {
                   )}
                 </tbody>
               </table>
+              </div>
               {selectedReservations.length > 0 && (
                 <div style={{ marginTop: '16px', padding: '16px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid #e74c3c', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ color: '#e74c3c', fontWeight: '600' }}>{selectedReservations.length} reservation(s) selected</span>
@@ -1309,7 +1297,7 @@ const removeAuthorizedEmail = async (id) => {
               )}
               <div style={{ background: 'var(--bg-card)', padding: '24px', marginBottom: '32px', border: '1px solid var(--secondary-accent)' }}>
                 <h3 style={{ marginBottom: '16px' }}>{editingMenuItem ? 'Edit Menu Item' : 'Add New Menu Item'}</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div className="dash-form-grid">
                   <input
                     type="text"
                     placeholder="Item Name"
@@ -1443,31 +1431,8 @@ const removeAuthorizedEmail = async (id) => {
                 </div>
               </div>
 
+              <div className="dash-table-wrapper">
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--primary-accent)' }}>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)', width: '40px' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedMenuItems.length === menuItems.length && menuItems.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedMenuItems(menuItems.map(item => item.id));
-                          } else {
-                            setSelectedMenuItems([]);
-                          }
-                        }}
-                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                      />
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Image</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Name</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Category</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Price</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Available</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Actions</th>
-                  </tr>
-                </thead>
                 <tbody>
                   {menuItems.map(item => (
                     <tr key={item.id} style={{ borderBottom: '1px solid var(--secondary-accent)', background: selectedMenuItems.includes(item.id) ? 'rgba(231, 76, 60, 0.1)' : 'transparent' }}>
@@ -1535,6 +1500,7 @@ const removeAuthorizedEmail = async (id) => {
                   ))}
                 </tbody>
               </table>
+              </div>
               {selectedMenuItems.length > 0 && (
                 <div style={{ marginTop: '16px', padding: '16px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid #e74c3c', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ color: '#e74c3c', fontWeight: '600' }}>
@@ -1596,7 +1562,7 @@ const removeAuthorizedEmail = async (id) => {
                       {authorizedEmails.map(user => (
                         <tr key={user.id} style={{ borderBottom: '1px solid var(--secondary-accent)' }}>
                           <td style={{ padding: '12px' }}>{user.email}</td>
-                          <td style={{ padding: '12px' }}>{user.addedAt?.toDate ? user.addedAt.toDate().toLocaleDateString() : 'N/A'}</td>
+                          <td style={{ padding: '12px' }}>{user.addedAt ? new Date(user.addedAt).toLocaleDateString() : 'N/A'}</td>
                           <td style={{ padding: '12px' }}>
                             <button 
                               onClick={() => removeAuthorizedEmail(user.id)}
@@ -1676,7 +1642,7 @@ const removeAuthorizedEmail = async (id) => {
             <div>
               <h2 style={{ marginBottom: '24px' }}>Reports & Tools</h2>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+              <div className="dash-reports-grid">
                 <div style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)' }}>
                   <h3 style={{ marginBottom: '16px', color: 'var(--primary-accent)' }}>📊 Daily Sales Report</h3>
                   <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>Summary of today's orders</p>
