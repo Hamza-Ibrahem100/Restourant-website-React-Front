@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { signOut, deleteUser } from 'firebase/auth';
@@ -13,6 +13,8 @@ function Nav() {
   const { user, showPopup } = useAuth();
   const { cartCount } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
+  const sidebarRef = useRef(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -21,6 +23,32 @@ function Nav() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Close sidebar when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (isOpen && sidebarRef.current && !sidebarRef.current.contains(e.target) && !e.target.closest('.hamburger')) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  // Close sidebar on route change
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location.pathname]);
+
+  // Prevent body scroll when sidebar is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isOpen]);
 
   const scrollToSection = (sectionId) => {
     setIsOpen(false);
@@ -68,13 +96,13 @@ function Nav() {
   };
 
   const navLinks = [
-    { id: 'about', label: 'About' },
-    { id: 'menu', label: 'Menu' },
-    { id: 'specials', label: 'Specials' },
-    { id: 'ordering', label: 'Order' },
-    { id: 'events', label: 'Events' },
-    { id: 'gallery', label: 'Gallery' },
-    { id: 'reservation', label: 'Reserve' }
+    { id: 'about', label: 'About', icon: '✦' },
+    { id: 'menu', label: 'Menu', icon: '🍽' },
+    { id: 'specials', label: 'Specials', icon: '⭐' },
+    { id: 'ordering', label: 'Order', icon: '📦' },
+    { id: 'events', label: 'Events', icon: '🎉' },
+    { id: 'gallery', label: 'Gallery', icon: '📸' },
+    { id: 'reservation', label: 'Reserve', icon: '📅' }
   ];
 
   return (
@@ -147,30 +175,84 @@ function Nav() {
         </div>
       </nav>
 
-      <div className={`mobile-menu ${isOpen ? 'active' : ''}`}>
-        <ul>
-{navLinks.map(link => (
-              <li key={link.id}>
-                <button 
-                  onClick={() => scrollToSection(link.id)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Playfair Display', serif", fontSize: '32px', color: 'var(--text-primary)' }}
-                >
-                  {link.label}
-                </button>
-              </li>
-            ))}
-            {user?.email === 'hamzaelsharkh@gmail.com' ? (
-              <li><Link to="/admin" onClick={() => setIsOpen(false)}>Dashboard</Link></li>
-            ) : user ? (
-              <li className="user-menu">
-                <span className="user-name">{user.firstName || 'User'}</span>
-                <button onClick={handleLogout}>Logout</button>
-              </li>
-            ) : (
-              <li><Link to="/login" onClick={() => setIsOpen(false)}>Login</Link></li>
-            )}
-          </ul>
+      {/* Sidebar Overlay */}
+      <div className={`sidebar-overlay ${isOpen ? 'active' : ''}`} />
+
+      {/* Premium Sidebar */}
+      <div ref={sidebarRef} className={`sidebar ${isOpen ? 'active' : ''}`}>
+        {/* Sidebar Header */}
+        <div className="sidebar-header">
+          <Link to="/" className="sidebar-logo" onClick={() => setIsOpen(false)}>
+            Food Lover
+          </Link>
+          <button className="sidebar-close" onClick={() => setIsOpen(false)}>
+            ✕
+          </button>
         </div>
+
+        {/* Sidebar Divider */}
+        <div className="sidebar-divider" />
+
+        {/* User Info */}
+        {user && (
+          <>
+            <div className="sidebar-user">
+              <div className="sidebar-user-avatar">
+                {(user.firstName || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div className="sidebar-user-info">
+                <span className="sidebar-user-name">{user.firstName || 'User'} {user.lastName || ''}</span>
+                <span className="sidebar-user-email">{user.email}</span>
+              </div>
+            </div>
+            <div className="sidebar-divider" />
+          </>
+        )}
+
+        {/* Navigation Links */}
+        <ul className="sidebar-nav">
+          {navLinks.map((link, index) => (
+            <li key={link.id} style={{ animationDelay: `${0.05 * index}s` }}>
+              <button onClick={() => scrollToSection(link.id)}>
+                <span className="sidebar-nav-icon">{link.icon}</span>
+                <span className="sidebar-nav-label">{link.label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className="sidebar-divider" />
+
+        {/* Quick Actions */}
+        <div className="sidebar-actions">
+          <button className="sidebar-action-btn cart-btn" onClick={() => { setIsOpen(false); navigate('/cart'); }}>
+            <span>🛒</span>
+            <span>Cart</span>
+            {cartCount > 0 && <span className="sidebar-cart-badge">{cartCount}</span>}
+          </button>
+
+          {user?.email === 'hamzaelsharkh@gmail.com' && (
+            <Link to="/admin" className="sidebar-action-btn dashboard-btn" onClick={() => setIsOpen(false)}>
+              <span>📊</span>
+              <span>Dashboard</span>
+            </Link>
+          )}
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="sidebar-footer">
+          {user ? (
+            <button className="sidebar-footer-btn logout" onClick={handleLogout}>
+              Sign Out
+            </button>
+          ) : (
+            <Link to="/login" className="sidebar-footer-btn login" onClick={() => setIsOpen(false)}>
+              Sign In
+            </Link>
+          )}
+          <p className="sidebar-copyright">© 2025 Food Lover</p>
+        </div>
+      </div>
 
       <LogoutModal 
         isOpen={showLogoutModal} 

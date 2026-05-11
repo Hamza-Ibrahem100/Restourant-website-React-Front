@@ -212,7 +212,7 @@ function HomePage() {
                     viewport={{ once: true }}
                     transition={{ delay: index * 0.1, duration: 0.3 }}
                   >
-                    <div className="menu-card-image" style={{ background: '#f5f5f5', minHeight: '200px' }}>
+                    <div className="menu-card-image" style={{ background: '#f5f5f5' }}>
                       {item.image ? (
                         <img 
                           src={item.image} 

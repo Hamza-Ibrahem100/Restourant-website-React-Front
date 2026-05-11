@@ -4,19 +4,14 @@ import Footer from '../components/Footer';
 import { db, storage } from '../firebase';
 import { 
   ref, 
-  set, 
   get, 
   update, 
   remove, 
   onValue, 
-  push, 
-  child,
-  serverTimestamp 
+  push 
 } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import imageCompression from 'browser-image-compression';
-import OverviewTab from '../components/dashboard/OverviewTab';
-import ReservationsTab from '../components/dashboard/ReservationsTab';
 import '../styles/Dashboard.css';
 import { useAuth } from '../context/AuthContext';
 
@@ -75,27 +70,77 @@ function Dashboard() {
   const prevOrderCount = useRef(0);
   const prevResCount = useRef(0);
   const soundEnabled = useRef(true);
+  const audioCtxRef = useRef(null);
+  const [audioEnabled, setAudioEnabled] = useState(false);
 
-  const playNotificationSound = useCallback(() => {
+  const enableAudio = () => {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.connect(g);
-      g.connect(ctx.destination);
-      
-      o.type = 'sine';
-      g.gain.setValueAtTime(0.3, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
-      
-      // Two-tone chime: C5 then E5
-      o.frequency.setValueAtTime(523.25, ctx.currentTime);
-      o.frequency.setValueAtTime(659.25, ctx.currentTime + 0.15);
-      
-      o.start(ctx.currentTime);
-      o.stop(ctx.currentTime + 0.6);
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!audioCtxRef.current && AudioContext) {
+        audioCtxRef.current = new AudioContext();
+      }
+      if (audioCtxRef.current) {
+        if (audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume();
+        }
+        // Play silent sound to explicitly unlock autoplay on this document
+        const osc = audioCtxRef.current.createOscillator();
+        const gain = audioCtxRef.current.createGain();
+        gain.gain.value = 0;
+        osc.connect(gain);
+        gain.connect(audioCtxRef.current.destination);
+        osc.start(0);
+        osc.stop(0.01);
+        setAudioEnabled(true);
+      }
+    } catch(e) {
+      console.error('Audio enable error:', e);
+    }
+  };
+
+  const playNotificationSound = useCallback((message = "New Alert", title = "New Notification!") => {
+    // 1. Play loud Web Audio API chime
+    try {
+      if (audioCtxRef.current) {
+        if (audioCtxRef.current.state === 'suspended') {
+           audioCtxRef.current.resume();
+        }
+        
+        const ctx = audioCtxRef.current;
+        // A nice major chord arpeggio (C5, E5, G5, C6)
+        const frequencies = [523.25, 659.25, 783.99, 1046.50];
+        
+        frequencies.forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          osc.type = 'triangle';
+          osc.frequency.value = freq;
+          
+          const startTime = ctx.currentTime + (i * 0.1);
+          gain.gain.setValueAtTime(0, startTime);
+          gain.gain.linearRampToValueAtTime(0.5, startTime + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.6);
+          
+          osc.start(startTime);
+          osc.stop(startTime + 0.6);
+        });
+      } else {
+        console.log('AudioContext not initialized. Click "Enable Sound Alerts".');
+      }
     } catch (e) {
-      // Audio not supported
+      console.error('Audio error:', e);
+    }
+    
+    // 2. Trigger Desktop Notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, {
+        body: message,
+        icon: '/favicon.ico', // Replace with your logo if you have one
+      });
     }
   }, []);
 
@@ -126,6 +171,11 @@ function Dashboard() {
   };
 
   useEffect(() => {
+    // Request Desktop Notification Permission
+    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+
     fetchAllData();
     
     const ordersRef = ref(db, 'orders');
@@ -138,12 +188,15 @@ function Dashboard() {
         
         // Detect new order and play sound + notification
         if (prevOrderCount.current > 0 && orderList.length > prevOrderCount.current) {
-          if (soundEnabled.current) playNotificationSound();
           const latestOrder = orderList[orderList.length - 1];
+          const msg = `New Order from ${latestOrder.customerName || 'Guest'} - $${(latestOrder.total_price || latestOrder.total || 0).toFixed(2)}`;
+          
+          if (soundEnabled.current) playNotificationSound(msg, "New Food Order! 🍔");
+          
           setNotifications(prev => [{
             id: Date.now(),
             type: 'new_order',
-            message: `New Order from ${latestOrder.customerName || 'Guest'} - $${(latestOrder.total_price || latestOrder.total || 0).toFixed(2)}`,
+            message: msg,
             timestamp: new Date(),
             read: false
           }, ...prev]);
@@ -165,12 +218,15 @@ function Dashboard() {
         
         // Detect new reservation and play sound + notification
         if (prevResCount.current > 0 && resList.length > prevResCount.current) {
-          if (soundEnabled.current) playNotificationSound();
           const latestRes = resList[resList.length - 1];
+          const msg = `New Reservation from ${latestRes.name} for ${latestRes.party || 1} guests on ${latestRes.date}`;
+          
+          if (soundEnabled.current) playNotificationSound(msg, "New Table Reservation! 📅");
+          
           setNotifications(prev => [{
             id: Date.now(),
             type: 'new_reservation',
-            message: `New Reservation from ${latestRes.name} for ${latestRes.party || 1} guests on ${latestRes.date}`,
+            message: msg,
             timestamp: new Date(),
             read: false
           }, ...prev]);
@@ -287,16 +343,26 @@ function Dashboard() {
 const addAuthorizedEmail = async () => {
     if (!newAuthorizedEmail.trim()) return;
     try {
-      await push(ref(db, 'authorized_users'), {
-        email: newAuthorizedEmail.trim().toLowerCase(),
-        addedAt: Date.now()
-      });
+      // Split the input by commas, spaces, or newlines to allow batch addition
+      const emails = newAuthorizedEmail.split(/[\s,]+/).filter(e => e.trim() !== '');
+      
+      if (emails.length === 0) return;
+
+      const promises = emails.map(email => 
+        push(ref(db, 'authorized_users'), {
+          email: email.trim().toLowerCase(),
+          addedAt: Date.now()
+        })
+      );
+      
+      await Promise.all(promises);
+
       setNewAuthorizedEmail('');
       fetchAllData();
-      alert('User added successfully! They can now access the dashboard.');
+      alert(`${emails.length} user(s) added successfully! They can now access the dashboard.`);
     } catch (error) {
       console.error('Error adding authorized email:', error);
-      alert('Error adding user: ' + error.message);
+      alert('Error adding user(s): ' + error.message);
     }
   };
 
@@ -785,7 +851,39 @@ const removeAuthorizedEmail = async (id) => {
         <div className="container">
           <div className="dash-header">
             <h1>Restaurant Dashboard</h1>
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative', display: 'flex', gap: '12px' }}>
+              {!audioEnabled ? (
+                <button
+                  onClick={enableAudio}
+                  style={{ 
+                    background: '#e74c3c', 
+                    border: 'none', 
+                    color: 'white', 
+                    padding: '8px 16px', 
+                    cursor: 'pointer', 
+                    borderRadius: '4px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 0 10px rgba(231, 76, 60, 0.5)'
+                  }}
+                >
+                  🔊 Enable Sound Alerts
+                </button>
+              ) : (
+                <button
+                  onClick={() => playNotificationSound('Test message', 'Test Notification!')}
+                  style={{ 
+                    background: '#2ecc71', 
+                    border: 'none', 
+                    color: 'white', 
+                    padding: '8px 16px', 
+                    cursor: 'pointer', 
+                    borderRadius: '4px',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  🔊 Test Sound
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('notifications')}
                 style={{ 
@@ -830,13 +928,40 @@ const removeAuthorizedEmail = async (id) => {
           </div>
 
           {activeTab === 'overview' && (
-            <OverviewTab 
-              analytics={analytics} 
-              ordersCount={orders.length} 
-              customersCount={customers.length} 
-              reservationsCount={reservations.length} 
-              setActiveTab={setActiveTab} 
-            />
+            <div>
+              <h2 style={{ marginBottom: '24px' }}>Dashboard Overview</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                <div style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '36px', fontWeight: 'bold', color: 'var(--primary-accent)' }}>${(analytics.totalRevenue || 0).toFixed(2)}</div>
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Total Revenue</div>
+                </div>
+                <div onClick={() => setActiveTab('orders')} style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', borderRadius: '8px', textAlign: 'center', cursor: 'pointer' }}>
+                  <div style={{ fontSize: '36px', fontWeight: 'bold', color: 'var(--primary-accent)' }}>{orders.length}</div>
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Orders</div>
+                </div>
+                <div onClick={() => setActiveTab('customers')} style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', borderRadius: '8px', textAlign: 'center', cursor: 'pointer' }}>
+                  <div style={{ fontSize: '36px', fontWeight: 'bold', color: 'var(--primary-accent)' }}>{customers.length}</div>
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Customers</div>
+                </div>
+                <div onClick={() => setActiveTab('reservations')} style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', borderRadius: '8px', textAlign: 'center', cursor: 'pointer' }}>
+                  <div style={{ fontSize: '36px', fontWeight: 'bold', color: 'var(--primary-accent)' }}>{reservations.length}</div>
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Reservations</div>
+                </div>
+              </div>
+              {analytics.popularItems && analytics.popularItems.length > 0 && (
+                <div style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--secondary-accent)', borderRadius: '8px' }}>
+                  <h3 style={{ marginBottom: '16px', color: 'var(--primary-accent)' }}>🔥 Popular Items</h3>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {analytics.popularItems.map(([name, count]) => (
+                      <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <span>{name}</span>
+                        <span style={{ color: 'var(--primary-accent)', fontWeight: 'bold' }}>{count} ordered</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'customers' && (
@@ -1114,7 +1239,51 @@ const removeAuthorizedEmail = async (id) => {
           )}
 
           {activeTab === 'reservations' && (
-            <ReservationsTab />
+            <div>
+              <h2 style={{ marginBottom: '24px' }}>Reservation Management</h2>
+              {reservations.length === 0 ? (
+                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '40px' }}>No reservations yet.</p>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--primary-accent)' }}>
+                        <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Name</th>
+                        <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Date</th>
+                        <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Time</th>
+                        <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Party</th>
+                        <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Phone</th>
+                        <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Status</th>
+                        <th style={{ textAlign: 'left', padding: '12px', color: 'var(--primary-accent)' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reservations.map(res => (
+                        <tr key={res.id} style={{ borderBottom: '1px solid var(--secondary-accent)' }}>
+                          <td style={{ padding: '12px' }}>{res.name}</td>
+                          <td style={{ padding: '12px' }}>{res.date}</td>
+                          <td style={{ padding: '12px' }}>{res.time}</td>
+                          <td style={{ padding: '12px' }}>{res.party || '-'}</td>
+                          <td style={{ padding: '12px' }}>{res.phone || '-'}</td>
+                          <td style={{ padding: '12px' }}>
+                            <span style={{ padding: '4px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: '600', background: res.status === 'confirmed' ? 'rgba(39,174,96,0.2)' : res.status === 'cancelled' ? 'rgba(231,76,60,0.2)' : 'rgba(241,196,15,0.2)', color: res.status === 'confirmed' ? '#27ae60' : res.status === 'cancelled' ? '#e74c3c' : '#f1c40f' }}>
+                              {(res.status || 'pending').toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button onClick={() => update(ref(db, `reservations/${res.id}`), { status: 'confirmed' })} style={{ padding: '4px 10px', background: '#27ae60', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>Confirm</button>
+                              <button onClick={() => update(ref(db, `reservations/${res.id}`), { status: 'cancelled' })} style={{ padding: '4px 10px', background: '#e74c3c', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>Cancel</button>
+                              <button onClick={() => { if(window.confirm('Delete this reservation?')) remove(ref(db, `reservations/${res.id}`)); }} style={{ padding: '4px 10px', background: '#333', border: '1px solid #555', color: '#aaa', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>🗑</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'requests' && (
@@ -1386,11 +1555,11 @@ const removeAuthorizedEmail = async (id) => {
               </p>
               
               <div style={{ background: 'var(--bg-card)', padding: '24px', marginBottom: '32px', border: '1px solid var(--secondary-accent)' }}>
-                <h3 style={{ marginBottom: '16px' }}>Add Authorized User</h3>
+                <h3 style={{ marginBottom: '16px' }}>Add Authorized User(s)</h3>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                   <input
                     type="email"
-                    placeholder="Enter email address"
+                    placeholder="Enter email addresses (separated by commas)"
                     value={newAuthorizedEmail}
                     onChange={(e) => setNewAuthorizedEmail(e.target.value)}
                     style={{ flex: '1', minWidth: '250px', padding: '12px', background: 'var(--bg-dark)', border: '1px solid var(--secondary-accent)', color: 'var(--text-primary)', fontSize: '16px' }}
@@ -1399,7 +1568,7 @@ const removeAuthorizedEmail = async (id) => {
                     onClick={addAuthorizedEmail}
                     style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: 'pointer', fontWeight: '600' }}
                   >
-                    Add User
+                    Add User(s)
                   </button>
                 </div>
               </div>
@@ -1555,16 +1724,29 @@ const removeAuthorizedEmail = async (id) => {
                   <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}>
                     <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Update stock for item:</p>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <select id="stockItemSelect" style={{ flex: 1, padding: '8px', background: 'var(--bg-dark)', border: '1px solid var(--secondary-accent)', color: 'var(--text-primary)' }}>
+                      <input 
+                        list="stockItemDatalist" 
+                        id="stockItemSearch" 
+                        placeholder="Type item name to search..." 
+                        style={{ flex: 1, padding: '8px', background: 'var(--bg-dark)', border: '1px solid var(--secondary-accent)', color: 'var(--text-primary)' }} 
+                      />
+                      <datalist id="stockItemDatalist">
                         {menuItems.map(item => (
-                          <option key={item.id} value={item.id}>{item.name}</option>
+                          <option key={item.id} value={item.name} />
                         ))}
-                      </select>
+                      </datalist>
                       <input type="number" id="stockValue" placeholder="Qty" style={{ width: '60px', padding: '8px', background: 'var(--bg-dark)', border: '1px solid var(--secondary-accent)', color: 'var(--text-primary)' }} />
                       <button onClick={() => {
-                        const itemId = document.getElementById('stockItemSelect').value;
+                        const searchName = document.getElementById('stockItemSearch').value;
                         const newStock = document.getElementById('stockValue').value;
-                        if (itemId && newStock) updateStock(itemId, newStock);
+                        const matchedItem = menuItems.find(m => m.name === searchName);
+                        if (matchedItem && newStock) {
+                          updateStock(matchedItem.id, newStock);
+                          document.getElementById('stockItemSearch').value = '';
+                          document.getElementById('stockValue').value = '';
+                        } else {
+                          alert('Please select a valid item from the list and enter a quantity.');
+                        }
                       }} style={{ padding: '8px 16px', background: 'var(--primary-accent)', border: 'none', color: 'var(--bg-dark)', cursor: 'pointer' }}>Update</button>
                     </div>
                   </div>

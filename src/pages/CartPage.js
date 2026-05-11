@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { push, ref, get } from 'firebase/database';
+import { push, ref } from 'firebase/database';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../styles/CartPage.css';
@@ -122,18 +122,27 @@ function CartPage() {
           total: Number(finalTotal.toFixed(2))
         },
         paymentMethod: paymentMethod,
-        status: 'pending',
+        status: paymentMethod === 'credit_card' ? 'pending_payment' : 'pending',
         createdAt: Date.now()
       };
       
-      await push(ref(db, 'orders'), orderData);
+      const newOrderRef = await push(ref(db, 'orders'), orderData);
+      const orderId = newOrderRef.key;
       
-      alert('Order placed successfully! We will confirm via email shortly.');
-      clearCart();
-      navigate('/');
+      if (paymentMethod === 'credit_card') {
+        // Redirect directly to the fixed Stripe Payment Link with the order ID attached
+        clearCart();
+        const baseUrl = process.env.REACT_APP_STRIPE_PAYMENT_LINK || 'https://buy.stripe.com/test_8x25kxecp2Fg4Jv0T29oc00';
+        window.location.href = `${baseUrl}?client_reference_id=${orderId}`;
+
+      } else {
+        alert('Order placed successfully! We will confirm via email shortly.');
+        clearCart();
+        navigate('/');
+      }
     } catch (error) {
       console.error('Error placing order:', error);
-      alert(error.code === 'PERMISSION_DENIED' ? 'Unable to save order. Please log in.' : 'Failed to place order.');
+      alert(error.code === 'PERMISSION_DENIED' ? 'Unable to save order. Please log in.' : 'Failed to process checkout. Please try again.');
     } finally {
       setPlacingOrder(false);
     }
@@ -386,6 +395,7 @@ function CartPage() {
                   >
                     {placingOrder ? 'Processing...' : `Place Order • $${finalTotal.toFixed(2)}`}
                   </button>
+                  
                   <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-secondary)', marginTop: '16px' }}>
                     By placing your order, you agree to our Terms of Service and Privacy Policy.
                   </p>

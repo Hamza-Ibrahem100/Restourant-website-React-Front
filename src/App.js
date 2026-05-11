@@ -5,6 +5,7 @@ import CartPage from './pages/CartPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
+import PaymentStatusPage from './pages/PaymentStatusPage';
 import { useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 function App() {
@@ -13,7 +14,7 @@ function App() {
   const currentPath = window.location.pathname;
 
   useEffect(() => {
-    const publicPaths = ['/register', '/cart', '/login'];
+    const publicPaths = ['/register', '/cart', '/login', '/payment-status'];
     const isPublicPath = publicPaths.includes(currentPath);
     const isHome = currentPath === '/';
     
@@ -35,6 +36,7 @@ function App() {
         <Route path="/cart" element={<CartPage />} />
         <Route path="/login" element={isLoggedIn ? <Navigate to="/" /> : <LoginPage />} />
         <Route path="/register" element={isLoggedIn ? <Navigate to="/" /> : <RegisterPage />} />
+        <Route path="/payment-status" element={<PaymentStatusPage />} />
         <Route path="/admin" element={isAdmin ? <Dashboard /> : <HomePage />} />
       </Routes>
     </CartProvider>
