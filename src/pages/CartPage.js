@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { push, ref } from 'firebase/database';
-import { useNavigate } from 'react-router-dom';
+import { get, ref } from 'firebase/database';
+import { dataService } from '../services/dataService';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../styles/CartPage.css';
 
 function CartPage() {
   const { cart, removeFromCart, updateQuantity, clearCart, cartTotal, cartCount } = useCart();
   const { user } = useAuth();
+  const location = useLocation();
   
-  // Checkout State
-  const [orderType, setOrderType] = useState('pickup');
+  // Checkout State — pre-select orderType if passed from homepage
+  const [orderType, setOrderType] = useState(location.state?.orderType || 'pickup');
   const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', tableNumber: '' });
   const [address, setAddress] = useState({ street: '', city: '', zip: '' });
   const [paymentMethod, setPaymentMethod] = useState('credit_card');
@@ -126,8 +128,8 @@ function CartPage() {
         createdAt: Date.now()
       };
       
-      const newOrderRef = await push(ref(db, 'orders'), orderData);
-      const orderId = newOrderRef.key;
+      const createdOrder = await dataService.createOrder(orderData);
+      const orderId = createdOrder.id;
       
       if (paymentMethod === 'credit_card') {
         // Redirect directly to the fixed Stripe Payment Link with the order ID attached

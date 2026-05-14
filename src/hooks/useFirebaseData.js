@@ -1,65 +1,42 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { db } from '../firebase';
-import { ref, get, query, limitToLast, orderByChild, update, remove, push } from 'firebase/database';
+import { useQuery } from '@tanstack/react-query';
+import { dataService } from '../services/dataService';
 
-// Fetch reservations with pagination
-export const useReservations = (limit = 20) => {
-  return useQuery({
-    queryKey: ['reservations', limit],
-    queryFn: async () => {
-      const q = query(ref(db, 'reservations'), orderByChild('createdAt'), limitToLast(limit));
-      const snapshot = await get(q);
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        return Object.entries(data).map(([id, val]) => ({ id, ...val })).reverse();
-      }
-      return [];
-    }
-  });
-};
+// ─── Menu ─────────────────────────────────────────────────────────────────────
 
-// Fetch orders with pagination
-export const useOrders = (limit = 20) => {
-  return useQuery({
-    queryKey: ['orders', limit],
-    queryFn: async () => {
-      const q = query(ref(db, 'orders'), orderByChild('createdAt'), limitToLast(limit));
-      const snapshot = await get(q);
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        return Object.entries(data).map(([id, val]) => ({ id, ...val })).reverse();
-      }
-      return [];
-    }
-  });
-};
-
-// Fetch menu
-export const useMenu = () => {
+/**
+ * Fetches menu items — tries Express API first, falls back to Firebase.
+ */
+export const useMenu = (limit) => {
   return useQuery({
     queryKey: ['menu'],
-    queryFn: async () => {
-      const snapshot = await get(ref(db, 'menu'));
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        return Object.entries(data).map(([id, val]) => ({ id, ...val }));
-      }
-      return [];
-    }
+    queryFn: () => dataService.getMenu(),
+    staleTime: 0 // Fetch immediately so updates from dashboard show up right away
   });
 };
 
-// Fetch users/customers
+// ─── Reservations ─────────────────────────────────────────────────────────────
+
+export const useReservations = (limit = 100) => {
+  return useQuery({
+    queryKey: ['reservations', limit],
+    queryFn: () => dataService.getReservations(limit)
+  });
+};
+
+// ─── Orders ───────────────────────────────────────────────────────────────────
+
+export const useOrders = (limit = 100) => {
+  return useQuery({
+    queryKey: ['orders', limit],
+    queryFn: () => dataService.getOrders(limit)
+  });
+};
+
+// ─── Users / Customers ────────────────────────────────────────────────────────
+
 export const useUsers = () => {
   return useQuery({
     queryKey: ['users'],
-    queryFn: async () => {
-      const snapshot = await get(ref(db, 'users'));
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        return Object.entries(data).map(([id, val]) => ({ id, ...val }));
-      }
-      return [];
-    }
+    queryFn: () => dataService.getUsers()
   });
 };

@@ -3,8 +3,7 @@ import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { db } from '../firebase';
-import { ref, push } from 'firebase/database';
+import { dataService } from '../services/dataService';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useMenu } from '../hooks/useFirebaseData';
@@ -36,9 +35,9 @@ function HomePage() {
     setVisibleCount(12);
   };
 
-  const handleOrder = (itemName) => {
-    alert(`${itemName} added to your order! Check our menu to complete your order.`);
-    menuRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const handleOrder = (itemName, itemPrice) => {
+    addToCart({ name: itemName, price: itemPrice });
+    navigate('/cart');
   };
 
   const handleReservation = async (e) => {
@@ -60,7 +59,7 @@ function HomePage() {
     };
     
     try {
-      await push(ref(db, 'reservations'), reservationData);
+      await dataService.createReservation(reservationData);
       btn.textContent = 'Success!';
       alert('Reservation request submitted! We will confirm via email.');
       form.reset();
@@ -140,6 +139,12 @@ function HomePage() {
                   <div className="stat-label">Awards</div>
                 </div>
               </div>
+              <div style={{ marginTop: '2.5rem', padding: '1.5rem', background: 'var(--bg-card)', borderLeft: '4px solid var(--primary-accent)', borderRadius: '0 8px 8px 0' }}>
+                <h4 style={{ color: 'var(--primary-accent)', marginBottom: '0.5rem', fontSize: '1.2rem' }}>Guest Accounts System</h4>
+                <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
+                  Join our community of over 50,000 guests by creating a personal account. You can seamlessly track your dining history, manage upcoming reservations, and save your culinary preferences for a truly personalized and memorable experience every time you visit.
+                </p>
+              </div>
             </motion.div>
           </div>
         </div>
@@ -178,10 +183,13 @@ function HomePage() {
           <div className="menu-tabs">
             <button className={`menu-tab ${activeCategory==='all'?'active':''}`} onClick={()=>handleMenuFilter('all')}>All</button>
             <button className={`menu-tab ${activeCategory==='starters'?'active':''}`} onClick={()=>handleMenuFilter('starters')}>Starters</button>
+            <button className={`menu-tab ${activeCategory==='soups'?'active':''}`} onClick={()=>handleMenuFilter('soups')}>Soups</button>
+            <button className={`menu-tab ${activeCategory==='salads'?'active':''}`} onClick={()=>handleMenuFilter('salads')}>Salads</button>
             <button className={`menu-tab ${activeCategory==='mains'?'active':''}`} onClick={()=>handleMenuFilter('mains')}>Mains</button>
-            <button className={`menu-tab ${activeCategory==='specials'?'active':''}`} onClick={()=>handleMenuFilter('specials')}>Specials</button>
+            <button className={`menu-tab ${activeCategory==='sides'?'active':''}`} onClick={()=>handleMenuFilter('sides')}>Sides</button>
             <button className={`menu-tab ${activeCategory==='desserts'?'active':''}`} onClick={()=>handleMenuFilter('desserts')}>Desserts</button>
             <button className={`menu-tab ${activeCategory==='drinks'?'active':''}`} onClick={()=>handleMenuFilter('drinks')}>Drinks</button>
+            <button className={`menu-tab ${activeCategory==='specials'?'active':''}`} onClick={()=>handleMenuFilter('specials')}>Specials</button>
           </div>
           
           <div className="menu-grid">
@@ -210,7 +218,7 @@ function HomePage() {
                     initial={{ opacity: 0, scale: 0.9 }}
                     whileInView={{ opacity: 1, scale: 1 }}
                     viewport={{ once: true }}
-                    transition={{ delay: index * 0.1, duration: 0.3 }}
+                    transition={{ duration: 0.3 }}
                   >
                     <div className="menu-card-image" style={{ background: '#f5f5f5' }}>
                       {item.image ? (
@@ -257,7 +265,11 @@ function HomePage() {
             <h2 className="section-title">Tonight's Specials</h2>
           </div>
           <div className="specials-grid">
-            {['Truffle Risotto', 'Wagyu A5 Steak', 'Lobster Thermidor'].map((name, index) => (
+            {[
+              { name: 'Truffle Risotto',   price: 48,  badge: "Chef's Choice", badgeClass: '' },
+              { name: 'Wagyu A5 Steak',    price: 125, badge: 'Limited',       badgeClass: 'limited' },
+              { name: 'Lobster Thermidor', price: 72,  badge: 'New',           badgeClass: '' },
+            ].map(({ name, price, badge, badgeClass }) => (
               <motion.div 
                 key={name}
                 className="special-card"
@@ -266,11 +278,11 @@ function HomePage() {
                 viewport={{ once: true }}
                 variants={fadeUpVariant}
               >
-                <span className={`special-badge ${index === 1 ? 'limited' : ''}`}>{index === 0 ? "Chef's Choice" : index === 1 ? "Limited" : "New"}</span>
+                <span className={`special-badge ${badgeClass}`}>{badge}</span>
                 <h4>{name}</h4>
                 <p>An exquisite culinary creation for tonight's special.</p>
-                <div className="special-price">${index === 0 ? 48 : index === 1 ? 125 : 72}</div>
-                <button className="special-btn" onClick={() => handleOrder(name)}>Order Now</button>
+                <div className="special-price">${price}</div>
+                <button className="special-btn" onClick={() => handleOrder(name, price)}>Order Now</button>
               </motion.div>
             ))}
           </div>
@@ -284,7 +296,11 @@ function HomePage() {
             <h2 className="section-title">Order Online</h2>
           </div>
           <div className="ordering-grid">
-            {['Pickup', 'Curbside', 'Delivery'].map((type, index) => (
+            {[
+              { type: 'pickup',   label: 'Pickup',  icon: '🍽️', desc: 'Order online and pick up at your convenience. Skip the wait!' },
+              { type: 'dine-in',  label: 'Dine In', icon: '🪑', desc: 'Order ahead for your table. Your meal will be ready when you arrive.' },
+              { type: 'delivery', label: 'Delivery', icon: '📦', desc: 'Fresh meals delivered to your door within our delivery zone.' },
+            ].map(({ type, label, icon, desc }, index) => (
               <motion.div 
                 key={type}
                 className="order-card"
@@ -293,10 +309,16 @@ function HomePage() {
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
               >
-                <div className="order-icon">{index === 0 ? '🍽️' : index === 1 ? '🚗' : '📦'}</div>
-                <h4>{type}</h4>
-                <p>{index === 0 ? 'Order online and pick up at your convenience. Skip the wait!' : index === 1 ? "We bring your order right to your car. Just pull up and we'll deliver." : 'Fresh meals delivered to your door within our delivery zone.'}</p>
-                <button onClick={() => menuRef.current?.scrollIntoView({ behavior: 'smooth' })} className="special-btn" style={{background: 'none', border: '1px solid var(--primary-accent)', color: 'var(--primary-accent)', cursor: 'pointer', padding: '8px 16px'}}>Start Order</button>
+                <div className="order-icon">{icon}</div>
+                <h4>{label}</h4>
+                <p>{desc}</p>
+                <button
+                  onClick={() => navigate('/cart', { state: { orderType: type } })}
+                  className="special-btn"
+                  style={{ background: 'none', border: '1px solid var(--primary-accent)', color: 'var(--primary-accent)', cursor: 'pointer', padding: '8px 16px' }}
+                >
+                  Start Order
+                </button>
               </motion.div>
             ))}
           </div>

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import { dataService } from '../services/dataService';
 import { db } from '../firebase';
-import { ref, update, get } from 'firebase/database';
+import { ref, get } from 'firebase/database';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import '../styles/PaymentStatus.css';
@@ -37,8 +38,7 @@ function PaymentStatusPage() {
 
           // If the payment is successful, update the database
           if (isSuccess && order.status === 'pending_payment') {
-            await update(orderRef, {
-              status: 'paid',
+            await dataService.updateOrderStatus(orderId, 'paid', {
               stripeSessionId: txnId || 'unknown',
               paidAt: Date.now()
             });

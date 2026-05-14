@@ -1,19 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
-import { db, storage } from '../firebase';
+import { db } from '../firebase';
 import { 
   ref, 
-  get, 
-  update, 
-  remove, 
   onValue, 
   push 
 } from 'firebase/database';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import imageCompression from 'browser-image-compression';
 import '../styles/Dashboard.css';
 import { useAuth } from '../context/AuthContext';
+import { dataService } from '../services/dataService';
+import { useUndo } from '../hooks/useUndo';
+import { useUndoShortcuts } from '../hooks/useUndoShortcuts';
 
 function Dashboard() {
   const { user } = useAuth();
@@ -22,7 +20,20 @@ function Dashboard() {
   const [reservations, setReservations] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [menuItems, setMenuItems] = useState([]);
+  
+  // Replace standard useState with our custom useUndo hook for menu items
+  const [menuItems, { 
+    set: setMenuItems, 
+    reset: resetMenuItems, 
+    undo: undoMenu, 
+    redo: redoMenu, 
+    canUndo: canUndoMenu, 
+    canRedo: canRedoMenu 
+  }] = useUndo([]);
+  
+  // Bind Ctrl+Z and Ctrl+Y to the undo/redo actions for the menu
+  useUndoShortcuts(undoMenu, redoMenu);
+
   const [loading, setLoading] = useState(true);
   const [brokenImages, setBrokenImages] = useState({});
   const [authorizedEmails, setAuthorizedEmails] = useState([]);
@@ -195,6 +206,7 @@ function Dashboard() {
           
           setNotifications(prev => [{
             id: Date.now(),
+            entityId: latestOrder.id,
             type: 'new_order',
             message: msg,
             timestamp: new Date(),
@@ -225,6 +237,7 @@ function Dashboard() {
           
           setNotifications(prev => [{
             id: Date.now(),
+            entityId: latestRes.id,
             type: 'new_reservation',
             message: msg,
             timestamp: new Date(),
@@ -297,28 +310,14 @@ function Dashboard() {
         }
       }
 
-      // Fetch from Realtime Database
-      console.log('Fetching from RTDB...');
-      const [reservationsSnap, customersSnap, ordersSnap, menuSnap, authEmailsSnap] = await Promise.all([
-        get(ref(db, 'reservations')),
-        get(ref(db, 'users')),
-        get(ref(db, 'orders')),
-        get(ref(db, 'menu')),
-        get(ref(db, 'authorized_users'))
+      // Fetch all collections via dataService (API first, Firebase fallback)
+      const [resData, custData, ordData, menuData, authData] = await Promise.all([
+        dataService.getReservations(),
+        dataService.getUsers(),
+        dataService.getOrders(),
+        dataService.getMenu(),
+        dataService.getAuthorizedUsers()
       ]);
-
-      console.log('RTDB data received:',
-        'reservations:', reservationsSnap.exists() ? Object.keys(reservationsSnap.val()).length : 0,
-        'users:', customersSnap.exists() ? Object.keys(customersSnap.val()).length : 0,
-        'orders:', ordersSnap.exists() ? Object.keys(ordersSnap.val()).length : 0,
-        'menu:', menuSnap.exists() ? Object.keys(menuSnap.val()).length : 0
-      );
-
-      const resData = reservationsSnap.exists() ? Object.entries(reservationsSnap.val()).map(([id, data]) => ({ id, ...data })) : [];
-      const custData = customersSnap.exists() ? Object.entries(customersSnap.val()).map(([id, data]) => ({ id, ...data })) : [];
-      const ordData = ordersSnap.exists() ? Object.entries(ordersSnap.val()).map(([id, data]) => ({ id, ...data })) : [];
-      const menuData = menuSnap.exists() ? Object.entries(menuSnap.val()).map(([id, data]) => ({ id, ...data })) : [];
-      const authData = authEmailsSnap.exists() ? Object.entries(authEmailsSnap.val()).map(([id, data]) => ({ id, ...data })) : [];
 
       // Update cache
       localStorage.setItem(MENU_CACHE_KEY, JSON.stringify({
@@ -340,26 +339,15 @@ function Dashboard() {
     }
   };
 
+
 const addAuthorizedEmail = async () => {
     if (!newAuthorizedEmail.trim()) return;
     try {
-      // Split the input by commas, spaces, or newlines to allow batch addition
-      const emails = newAuthorizedEmail.split(/[\s,]+/).filter(e => e.trim() !== '');
-      
-      if (emails.length === 0) return;
-
-      const promises = emails.map(email => 
-        push(ref(db, 'authorized_users'), {
-          email: email.trim().toLowerCase(),
-          addedAt: Date.now()
-        })
-      );
-      
-      await Promise.all(promises);
-
+      await dataService.addAuthorizedUser(newAuthorizedEmail);
       setNewAuthorizedEmail('');
       fetchAllData();
-      alert(`${emails.length} user(s) added successfully! They can now access the dashboard.`);
+      const count = newAuthorizedEmail.split(/[\s,]+/).filter(e => e.trim()).length;
+      alert(`${count} user(s) added successfully! They can now access the dashboard.`);
     } catch (error) {
       console.error('Error adding authorized email:', error);
       alert('Error adding user(s): ' + error.message);
@@ -369,7 +357,7 @@ const addAuthorizedEmail = async () => {
 const removeAuthorizedEmail = async (id) => {
     if (window.confirm('Remove this authorized user?')) {
       try {
-        await remove(ref(db, `authorized_users/${id}`));
+        await dataService.removeAuthorizedUser(id);
         fetchAllData();
         alert('User removed successfully.');
       } catch (error) {
@@ -381,10 +369,17 @@ const removeAuthorizedEmail = async (id) => {
 
   const handleStatus = async (collectionName, id, newStatus) => {
     try {
-      await update(ref(db, `${collectionName}/${id}`), { 
-        status: newStatus,
-        updatedAt: Date.now()
-      });
+      if (collectionName === 'orders') {
+        await dataService.updateOrderStatus(id, newStatus);
+        if (newStatus === 'completed') {
+          setNotifications(prev => prev.filter(n => n.entityId !== id));
+        }
+      } else if (collectionName === 'reservations') {
+        await dataService.updateReservationStatus(id, newStatus);
+        if (newStatus === 'confirmed' || newStatus === 'cancelled') {
+          setNotifications(prev => prev.filter(n => n.entityId !== id));
+        }
+      }
       fetchAllData();
     } catch (error) {
       console.error('Error updating:', error);
@@ -394,7 +389,10 @@ const removeAuthorizedEmail = async (id) => {
   const handleDelete = async (collectionName, id) => {
     if (window.confirm('Delete this item?')) {
       try {
-        await remove(ref(db, `${collectionName}/${id}`));
+        if (collectionName === 'orders') await dataService.deleteOrder(id);
+        else if (collectionName === 'reservations') await dataService.deleteReservation(id);
+        else if (collectionName === 'menu') await dataService.deleteMenuItem(id);
+        else if (collectionName === 'users') await dataService.deleteUser(id);
         fetchAllData();
       } catch (error) {
         console.error('Error deleting:', error);
@@ -404,8 +402,7 @@ const removeAuthorizedEmail = async (id) => {
 
   const handleBulkDeleteMenu = async () => {
     try {
-      const deletePromises = selectedMenuItems.map(id => remove(ref(db, `menu/${id}`)));
-      await Promise.all(deletePromises);
+      await dataService.bulkDeleteMenuItems(selectedMenuItems);
       setSelectedMenuItems([]);
       setShowDeleteModal(false);
       setDeleteItemId(null);
@@ -419,7 +416,7 @@ const removeAuthorizedEmail = async (id) => {
   const handleSingleDeleteMenu = async () => {
     if (!deleteItemId) return;
     try {
-      await remove(ref(db, `menu/${deleteItemId}`));
+      await dataService.deleteMenuItem(deleteItemId);
       setDeleteItemId(null);
       setDeleteType(null);
       setShowDeleteModal(false);
@@ -432,12 +429,10 @@ const removeAuthorizedEmail = async (id) => {
 
   const handleBulkDelete = async (type, ids) => {
     try {
-      const deletePromises = ids.map(id => remove(ref(db, `${type}/${id}`)));
-      await Promise.all(deletePromises);
-      if (type === 'menu') { setSelectedMenuItems([]); localStorage.removeItem('foodlover_menu_cache'); }
-      if (type === 'users') setSelectedUsers([]);
-      if (type === 'orders') setSelectedOrders([]);
-      if (type === 'reservations') setSelectedReservations([]);
+      if (type === 'menu') { await dataService.bulkDeleteMenuItems(ids); setSelectedMenuItems([]); localStorage.removeItem('foodlover_menu_cache'); }
+      else if (type === 'users') { await dataService.bulkDeleteUsers(ids); setSelectedUsers([]); }
+      else if (type === 'orders') { await dataService.bulkDeleteOrders(ids); setSelectedOrders([]); }
+      else if (type === 'reservations') { await dataService.bulkDeleteReservations(ids); setSelectedReservations([]); }
       setShowDeleteModal(false);
       setDeleteType(null);
       fetchAllData();
@@ -449,7 +444,10 @@ const removeAuthorizedEmail = async (id) => {
   const handleSingleDelete = async (type, id) => {
     if (!id) return;
     try {
-      await remove(ref(db, `${type}/${id}`));
+      if (type === 'menu') await dataService.deleteMenuItem(id);
+      else if (type === 'users') await dataService.deleteUser(id);
+      else if (type === 'orders') await dataService.deleteOrder(id);
+      else if (type === 'reservations') await dataService.deleteReservation(id);
       setDeleteItemId(null);
       setDeleteType(null);
       setShowDeleteModal(false);
@@ -467,9 +465,7 @@ const removeAuthorizedEmail = async (id) => {
 
   const handleToggleAvailability = async (itemId, currentStatus) => {
     try {
-      await update(ref(db, `menu/${itemId}`), { 
-        is_available: !currentStatus 
-      });
+      await dataService.updateMenuItem(itemId, { is_available: !currentStatus });
       fetchAllData();
     } catch (error) {
       console.error('Error toggling availability:', error);
@@ -483,35 +479,9 @@ const removeAuthorizedEmail = async (id) => {
     if (!file) return { fullUrl: null, thumbnailUrl: null };
     setUploadingImage(true);
     try {
-      // Compress full image (reduce to ~200KB, WebP format)
-      const fullOptions = {
-        maxSizeMB: 0.2,
-        maxWidthOrHeight: 800,
-        useWebWorker: true,
-        fileType: 'image/webp'
-      };
-      const fullCompressed = await imageCompression(file, fullOptions);
-      
-      // Upload full image
-      const fullRef = ref(storage, `menu-images/${Date.now()}_full.webp`);
-      await uploadBytes(fullRef, fullCompressed);
-      const fullUrl = await getDownloadURL(fullRef);
-
-      // Create and upload thumbnail (smaller, ~50KB)
-      const thumbOptions = {
-        maxSizeMB: 0.05,
-        maxWidthOrHeight: 300,
-        useWebWorker: true,
-        fileType: 'image/webp'
-      };
-      const thumbCompressed = await imageCompression(file, thumbOptions);
-      
-      const thumbRef = ref(storage, `menu-images/${Date.now()}_thumb.webp`);
-      await uploadBytes(thumbRef, thumbCompressed);
-      const thumbnailUrl = await getDownloadURL(thumbRef);
-
+      const result = await dataService.uploadMenuImage(file);
       setUploadingImage(false);
-      return { fullUrl, thumbnailUrl };
+      return result;
     } catch (error) {
       console.error('Error uploading image:', error);
       setUploadingImage(false);
@@ -529,45 +499,29 @@ const removeAuthorizedEmail = async (id) => {
       return;
     }
     try {
-      // Create new item in RTDB
-      const newItemRef = push(ref(db, 'menu'));
-      const newItemId = newItemRef.key;
-
       let imageUrl = '';
       let thumbnailUrl = '';
       
-      // Upload image if selected file
       if (selectedImage) {
         const { fullUrl, thumbnailUrl: thumbUrl } = await uploadImage(selectedImage);
-        imageUrl = fullUrl;
-        thumbnailUrl = thumbUrl;
+        imageUrl = fullUrl || '';
+        thumbnailUrl = thumbUrl || '';
       } else if (newMenuItem.image) {
-        // Use URL if provided
         imageUrl = newMenuItem.image;
         thumbnailUrl = newMenuItem.image;
       }
 
-      // Update with image URLs
-      if (imageUrl) {
-        await update(ref(db, `menu/${newItemId}`), { 
-          image: imageUrl,
-          thumbnail: thumbnailUrl || imageUrl
-        });
-      } else {
-        // Set initial data if no image
-        await set(ref(db, `menu/${newItemId}`), {
-          name: newMenuItem.name,
-          price: parseFloat(newMenuItem.price),
-          category: newMenuItem.category || 'mains',
-          description: newMenuItem.description || '',
-          is_available: true,
-          is_hidden: newMenuItem.is_hidden || false,
-          stock: parseInt(newMenuItem.stock) || 20,
-          createdAt: Date.now(),
-          image: '',
-          thumbnail: ''
-        });
-      }
+      await dataService.addMenuItem({
+        name: newMenuItem.name,
+        price: parseFloat(newMenuItem.price),
+        category: newMenuItem.category || 'mains',
+        description: newMenuItem.description || '',
+        is_available: true,
+        is_hidden: newMenuItem.is_hidden || false,
+        stock: parseInt(newMenuItem.stock) || 20,
+        image: imageUrl,
+        thumbnail: thumbnailUrl || imageUrl
+      });
 
       setNewMenuItem({ 
         name: '', 
@@ -582,9 +536,7 @@ const removeAuthorizedEmail = async (id) => {
       setSelectedImage(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       
-      // Clear homepage cache so new items appear immediately
       localStorage.removeItem('foodlover_menu_cache');
-      
       fetchAllData();
       alert('Menu item added successfully!');
     } catch (error) {
@@ -595,6 +547,18 @@ const removeAuthorizedEmail = async (id) => {
 
   const seedFromUI = async () => {
     const samples = [
+      // ── Soups ──────────────────────────────────────────────────────────────
+      { name: 'Lobster Bisque', category: 'soups', price: 18, description: 'Creamy Maine lobster bisque, tarragon cream, chives, crusty bread', image: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=800&q=80', is_available: true, is_hidden: false, stock: 20 },
+      { name: 'French Onion Soup', category: 'soups', price: 14, description: 'Slowly caramelized onions, rich beef broth, gruyère crouton, fresh thyme', image: 'https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=800&q=80', is_available: true, is_hidden: false, stock: 20 },
+      { name: 'Roasted Tomato Bisque', category: 'soups', price: 12, description: 'Slow-roasted heirloom tomatoes, fresh basil, smoked paprika cream', image: 'https://images.unsplash.com/photo-1476718406336-bb5a9690ee2a?w=800&q=80', is_available: true, is_hidden: false, stock: 20 },
+      // ── Salads ─────────────────────────────────────────────────────────────
+      { name: 'Classic Caesar', category: 'salads', price: 16, description: 'Romaine hearts, house-made Caesar dressing, shaved parmesan, herb croutons', image: 'https://images.unsplash.com/photo-1550304943-4f24f54ddde9?w=800&q=80', is_available: true, is_hidden: false, stock: 20 },
+      { name: 'Burrata & Arugula', category: 'salads', price: 19, description: 'Fresh burrata, wild arugula, heirloom tomatoes, aged balsamic, pine nuts', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80', is_available: true, is_hidden: false, stock: 20 },
+      { name: 'Niçoise Salad', category: 'salads', price: 21, description: 'Seared ahi tuna, olives, haricots verts, quail eggs, anchovy vinaigrette', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&q=80', is_available: true, is_hidden: false, stock: 20 },
+      // ── Sides ──────────────────────────────────────────────────────────────
+      { name: 'Truffle Mac & Cheese', category: 'sides', price: 14, description: 'Aged cheddar, gruyère, black truffle oil, toasted breadcrumbs', image: 'https://images.unsplash.com/photo-1574894709920-11b28e7367e3?w=800&q=80', is_available: true, is_hidden: false, stock: 30 },
+      { name: 'Roasted Asparagus', category: 'sides', price: 10, description: 'Seasonal asparagus, lemon zest, shaved parmesan, garlic oil', image: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=800&q=80', is_available: true, is_hidden: false, stock: 30 },
+      { name: 'Duck Fat Fries', category: 'sides', price: 12, description: 'Hand-cut russet fries cooked in duck fat, rosemary salt, garlic aioli', image: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=800&q=80', is_available: true, is_hidden: false, stock: 30 },
       { name: 'Burrata & Heirloom Tomatoes', category: 'starters', price: 18, description: 'Fresh burrata cheese with seasonal heirloom tomatoes, aged balsamic reduction, fresh basil', image: 'https://images.unsplash.com/photo-1608897013039-887f21d8c804?w=800&q=80', is_available: true, is_hidden: false, stock: 25 },
       { name: 'Wagyu Beef Tartare', category: 'starters', price: 28, description: 'Premium A5 wagyu beef, quail egg, capers, cornichons, truffle aioli', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=800&q=80', is_available: true, is_hidden: false },
       { name: 'Tuna Tartare', category: 'starters', price: 22, description: 'Yellowfin tuna, avocado, sesame, crispy wonton chips', image: 'https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&q=80', is_available: true, is_hidden: false },
@@ -685,10 +649,9 @@ const removeAuthorizedEmail = async (id) => {
   const handleUpdateMenuItem = async () => {
     if (!editingMenuItem) return;
     try {
-      await update(ref(db, `menu/${editingMenuItem.id}`), {
+      await dataService.updateMenuItem(editingMenuItem.id, {
         ...editingMenuItem,
-        price: parseFloat(editingMenuItem.price),
-        updatedAt: Date.now()
+        price: parseFloat(editingMenuItem.price)
       });
       setEditingMenuItem(null);
       fetchAllData();
@@ -700,10 +663,9 @@ const removeAuthorizedEmail = async (id) => {
   const handleAddCustomer = async () => {
     if (!newCustomer.name || !newCustomer.email) return;
     try {
-      await push(ref(db, "users"), {
+      await dataService.addUser({
         ...newCustomer,
-        loyalty_points: parseInt(newCustomer.loyalty_points) || 0,
-        createdAt: Date.now()
+        loyalty_points: parseInt(newCustomer.loyalty_points) || 0
       });
       setNewCustomer({ name: '', email: '', phone: '', address: '', loyalty_points: 0 });
       fetchAllData();
@@ -715,10 +677,9 @@ const removeAuthorizedEmail = async (id) => {
   const handleUpdateCustomer = async () => {
     if (!editingCustomer) return;
     try {
-      await update(ref(db, `users/${editingCustomer.id}`), {
+      await dataService.updateUser(editingCustomer.id, {
         ...editingCustomer,
-        loyalty_points: parseInt(editingCustomer.loyalty_points) || 0,
-        updatedAt: Date.now()
+        loyalty_points: parseInt(editingCustomer.loyalty_points) || 0
       });
       setEditingCustomer(null);
       fetchAllData();
@@ -806,6 +767,18 @@ const removeAuthorizedEmail = async (id) => {
       fetchAllData();
     } catch (error) {
       console.error('Error updating stock:', error);
+    }
+  };
+
+  const handleGridEnterKey = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const form = e.currentTarget;
+      const elements = Array.from(form.querySelectorAll('input:not([type="hidden"]), select, textarea, button'));
+      const index = elements.indexOf(e.target);
+      if (index > -1 && index < elements.length - 1) {
+        elements[index + 1].focus();
+      }
     }
   };
 
@@ -975,7 +948,7 @@ const removeAuthorizedEmail = async (id) => {
                 </div>
               )}
               
-              <div style={{ background: 'var(--bg-card)', padding: '24px', marginBottom: '32px', border: '1px solid var(--secondary-accent)' }}>
+              <div onKeyDown={handleGridEnterKey} style={{ background: 'var(--bg-card)', padding: '24px', marginBottom: '32px', border: '1px solid var(--secondary-accent)' }}>
                 <h3 style={{ marginBottom: '16px' }}>{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</h3>
                 <div className="dash-form-grid">
                   <input
@@ -1317,7 +1290,29 @@ const removeAuthorizedEmail = async (id) => {
 
           {activeTab === 'menu' && (
             <div>
-              <h2 style={{ marginBottom: '24px' }}>Menu Management</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <h2 style={{ margin: 0 }}>Menu Management</h2>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    onClick={undoMenu} 
+                    disabled={!canUndoMenu}
+                    className="btn-secondary" 
+                    title="Undo (Ctrl+Z)"
+                    style={{ opacity: canUndoMenu ? 1 : 0.5, cursor: canUndoMenu ? 'pointer' : 'not-allowed', padding: '6px 12px' }}
+                  >
+                    ↩ Undo
+                  </button>
+                  <button 
+                    onClick={redoMenu} 
+                    disabled={!canRedoMenu}
+                    className="btn-secondary" 
+                    title="Redo (Ctrl+Y)"
+                    style={{ opacity: canRedoMenu ? 1 : 0.5, cursor: canRedoMenu ? 'pointer' : 'not-allowed', padding: '6px 12px' }}
+                  >
+                    ↪ Redo
+                  </button>
+                </div>
+              </div>
               {menuItems.length === 0 && (
                 <div className="no-data" style={{ padding: '24px', border: '2px solid var(--primary-accent)', borderRadius: 8, marginBottom: 24, background: 'rgba(212, 165, 116, 0.1)', textAlign: 'center' }}>
                   <p style={{ margin: '0 0 16px 0', color: 'var(--text-primary)', fontSize: '18px', fontWeight: '600' }}>No menu items found!</p>
@@ -1325,7 +1320,7 @@ const removeAuthorizedEmail = async (id) => {
                   <button onClick={seedFromUI} style={{ padding: '14px 32px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>Add Sample Menu Items</button>
                 </div>
               )}
-              <div style={{ background: 'var(--bg-card)', padding: '24px', marginBottom: '32px', border: '1px solid var(--secondary-accent)' }}>
+              <div onKeyDown={handleGridEnterKey} style={{ background: 'var(--bg-card)', padding: '24px', marginBottom: '32px', border: '1px solid var(--secondary-accent)' }}>
                 <h3 style={{ marginBottom: '16px' }}>{editingMenuItem ? 'Edit Menu Item' : 'Add New Menu Item'}</h3>
                 <div className="dash-form-grid">
                   <input
@@ -1359,7 +1354,10 @@ const removeAuthorizedEmail = async (id) => {
                     style={{ padding: '12px', background: 'var(--bg-dark)', border: '1px solid var(--secondary-accent)', color: 'var(--text-primary)', fontSize: '16px' }}
                   >
                     <option value="starters">Starters</option>
+                    <option value="soups">Soups</option>
+                    <option value="salads">Salads</option>
                     <option value="mains">Mains</option>
+                    <option value="sides">Sides</option>
                     <option value="desserts">Desserts</option>
                     <option value="drinks">Drinks</option>
                     <option value="specials">Specials</option>
@@ -1598,7 +1596,7 @@ const removeAuthorizedEmail = async (id) => {
                               onClick={() => removeAuthorizedEmail(user.id)}
                               style={{ padding: '6px 12px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}
                             >
-                              Remove
+                              Delete
                             </button>
                           </td>
                         </tr>
