@@ -5,3 +5,5 @@ functions/firebase-debug.log
 functions/node_modules
 build
 *.log
+
+.vercel
