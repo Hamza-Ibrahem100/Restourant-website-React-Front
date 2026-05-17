@@ -5,7 +5,8 @@ import { db } from '../firebase';
 import { 
   ref, 
   onValue, 
-  push 
+  push,
+  set
 } from 'firebase/database';
 import '../styles/Dashboard.css';
 import { useAuth } from '../context/AuthContext';
@@ -38,6 +39,7 @@ function Dashboard() {
   const [brokenImages, setBrokenImages] = useState({});
   const [authorizedEmails, setAuthorizedEmails] = useState([]);
   const [newAuthorizedEmail, setNewAuthorizedEmail] = useState('');
+  const [publicDashboardAccess, setPublicDashboardAccess] = useState(false);
   
   const [newMenuItem, setNewMenuItem] = useState({ 
     name: '', 
@@ -286,12 +288,22 @@ function Dashboard() {
       }
     }, (error) => console.error('Auth users listener error:', error));
 
+    // Real-time listener for settings
+    const settingsRef = ref(db, 'settings');
+    const settingsUnsubscribe = onValue(settingsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const settings = snapshot.val();
+        setPublicDashboardAccess(!!settings.publicDashboardAccess);
+      }
+    }, (error) => console.error('Settings listener error:', error));
+
     return () => {
       ordersUnsubscribe();
       reservationsUnsubscribe();
       menuUnsubscribe();
       usersUnsubscribe();
       authUnsubscribe();
+      settingsUnsubscribe();
     };
   }, []);
 
@@ -354,7 +366,7 @@ const addAuthorizedEmail = async () => {
     }
   };
 
-const removeAuthorizedEmail = async (id) => {
+  const removeAuthorizedEmail = async (id) => {
     if (window.confirm('Remove this authorized user?')) {
       try {
         await dataService.removeAuthorizedUser(id);
@@ -364,6 +376,18 @@ const removeAuthorizedEmail = async (id) => {
         console.error('Error removing authorized email:', error);
         alert('Error removing user: ' + error.message);
       }
+    }
+  };
+
+  const togglePublicDashboardAccess = async () => {
+    try {
+      const newValue = !publicDashboardAccess;
+      await set(ref(db, 'settings/publicDashboardAccess'), newValue);
+      setPublicDashboardAccess(newValue);
+      alert(newValue ? 'Dashboard is now open to ALL registered users.' : 'Dashboard is now restricted to authorized users only.');
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      alert('Failed to update dashboard accessibility.');
     }
   };
 
@@ -444,7 +468,7 @@ const removeAuthorizedEmail = async (id) => {
   const handleSingleDelete = async (type, id) => {
     if (!id) return;
     try {
-      if (type === 'menu') await dataService.deleteMenuItem(id);
+      if (type === 'menu') { await dataService.deleteMenuItem(id); localStorage.removeItem('foodlover_menu_cache'); }
       else if (type === 'users') await dataService.deleteUser(id);
       else if (type === 'orders') await dataService.deleteOrder(id);
       else if (type === 'reservations') await dataService.deleteReservation(id);
@@ -1247,7 +1271,7 @@ const removeAuthorizedEmail = async (id) => {
                             <div style={{ display: 'flex', gap: '6px' }}>
                               <button onClick={() => update(ref(db, `reservations/${res.id}`), { status: 'confirmed' })} style={{ padding: '4px 10px', background: '#27ae60', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>Confirm</button>
                               <button onClick={() => update(ref(db, `reservations/${res.id}`), { status: 'cancelled' })} style={{ padding: '4px 10px', background: '#e74c3c', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>Cancel</button>
-                              <button onClick={() => { if(window.confirm('Delete this reservation?')) remove(ref(db, `reservations/${res.id}`)); }} style={{ padding: '4px 10px', background: '#333', border: '1px solid #555', color: '#aaa', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>🗑</button>
+                              <button onClick={() => confirmDelete('reservations', res.id)} style={{ padding: '4px 10px', background: '#e74c3c', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>🗑</button>
                             </div>
                           </td>
                         </tr>
@@ -1518,7 +1542,7 @@ const removeAuthorizedEmail = async (id) => {
                           Edit
                         </button>
                         <button 
-                          onClick={() => { setDeleteItemId(item.id); setShowDeleteModal(true); }} 
+                          onClick={() => confirmDelete('menu', item.id)} 
                           style={{ margin: '2px', padding: '6px 12px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}
                         >
                           🗑
@@ -1535,7 +1559,7 @@ const removeAuthorizedEmail = async (id) => {
                     {selectedMenuItems.length} item(s) selected
                   </span>
                   <button 
-                    onClick={() => setShowDeleteModal(true)}
+                    onClick={() => confirmDelete('menu')}
                     style={{ padding: '10px 20px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontWeight: '600', borderRadius: '6px' }}
                   >
                     Delete Selected
@@ -1551,6 +1575,32 @@ const removeAuthorizedEmail = async (id) => {
               <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
                 Add email addresses that will have access to the restaurant dashboard. The main admin (hamzaelsharkh@gmail.com) always has access.
               </p>
+
+              <div style={{ background: 'var(--bg-card)', padding: '24px', marginBottom: '32px', border: '1px solid var(--secondary-accent)' }}>
+                <h3 style={{ marginBottom: '16px' }}>Dashboard Accessibility</h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', background: 'var(--bg-dark)', borderRadius: '8px' }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 8px 0', color: 'var(--text-primary)' }}>Public Dashboard Access</h4>
+                    <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>
+                      If enabled, <strong>any</strong> registered user can view and interact with the dashboard. Keep this disabled for security.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={togglePublicDashboardAccess}
+                    style={{ 
+                      padding: '10px 20px', 
+                      background: publicDashboardAccess ? '#e74c3c' : '#27ae60', 
+                      color: 'white', 
+                      border: 'none', 
+                      cursor: 'pointer', 
+                      fontWeight: '600',
+                      borderRadius: '6px'
+                    }}
+                  >
+                    {publicDashboardAccess ? 'Disable Public Access' : 'Enable Public Access'}
+                  </button>
+                </div>
+              </div>
               
               <div style={{ background: 'var(--bg-card)', padding: '24px', marginBottom: '32px', border: '1px solid var(--secondary-accent)' }}>
                 <h3 style={{ marginBottom: '16px' }}>Add Authorized User(s)</h3>

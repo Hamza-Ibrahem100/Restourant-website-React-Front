@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { signInWithEmailAndPassword, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, googleProvider, facebookProvider } from '../firebase';
+import { dataService } from '../services/dataService';
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -62,23 +63,6 @@ function LoginPage() {
       setTimeout(() => navigate('/'), 1500);
     } catch (error) {
       setErrors({ general: error.message || 'Failed to sign in' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async (e) => {
-    e.preventDefault();
-    if (!email) {
-      setErrors({ email: 'Please enter your email address to reset password.' });
-      return;
-    }
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(auth, email);
-      showPopup('Password reset email sent! Please check your inbox.');
-    } catch (error) {
-      setErrors({ general: error.message || 'Failed to send password reset email.' });
     } finally {
       setLoading(false);
     }
@@ -179,7 +163,7 @@ function LoginPage() {
                   />
                   <label htmlFor="rememberMe">Remember me</label>
                 </div>
-                <Link to="#" onClick={handleForgotPassword} className="forgot-password">Forgot password?</Link>
+                <Link to="/forgot-password" className="forgot-password">Forgot password?</Link>
               </div>
               
               <button type="submit" className="form-submit" disabled={loading}>

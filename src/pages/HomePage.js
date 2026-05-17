@@ -36,12 +36,22 @@ function HomePage() {
   };
 
   const handleOrder = (itemName, itemPrice) => {
+    if (!user) {
+      alert("Please sign in to place an order.");
+      navigate('/login');
+      return;
+    }
     addToCart({ name: itemName, price: itemPrice });
     navigate('/cart');
   };
 
   const handleReservation = async (e) => {
     e.preventDefault();
+    if (!user) {
+      alert("Please sign in to make a reservation.");
+      navigate('/login');
+      return;
+    }
     const form = e.target;
     const btn = form.querySelector('.form-submit');
     btn.textContent = 'Saving...';

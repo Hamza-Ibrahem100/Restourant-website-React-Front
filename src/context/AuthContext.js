@@ -17,6 +17,12 @@ export function AuthProvider({ children }) {
         return true;
       }
       try {
+        const settingsSnap = await get(ref(db, 'settings'));
+        const settings = settingsSnap.val() || {};
+        if (settings.publicDashboardAccess) {
+          return true;
+        }
+
         const authSnap = await get(ref(db, 'authorized_users'));
         const data = authSnap.val();
         const authorizedEmails = data ? Object.values(data).map(item => item.email?.toLowerCase()) : [];
