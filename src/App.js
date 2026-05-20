@@ -7,14 +7,17 @@ import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import PaymentStatusPage from './pages/PaymentStatusPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 function App() {
-  const { user, isLoggedIn, popup } = useAuth();
+  const { user, isLoggedIn, popup, authLoading } = useAuth();
   const navigate = useNavigate();
   const currentPath = window.location.pathname;
 
   useEffect(() => {
+    if (authLoading) return; // Wait until auth state is determined
+
     const publicPaths = ['/register', '/login', '/payment-status', '/forgot-password'];
     const isPublicPath = publicPaths.includes(currentPath);
     const isHome = currentPath === '/';
@@ -39,7 +42,11 @@ function App() {
         <Route path="/register" element={isLoggedIn ? <Navigate to="/" /> : <RegisterPage />} />
         <Route path="/forgot-password" element={isLoggedIn ? <Navigate to="/" /> : <ForgotPasswordPage />} />
         <Route path="/payment-status" element={<PaymentStatusPage />} />
-        <Route path="/admin" element={isAdmin ? <Dashboard /> : <HomePage />} />
+        
+        {/* Protected Admin Routes */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/admin" element={<Dashboard />} />
+        </Route>
       </Routes>
       
       {/* Global Popup Notification */}

@@ -121,16 +121,19 @@ function Nav() {
                 </button>
               </li>
             ))}
-            {user?.email === 'hamzaelsharkh@gmail.com' ? (
-              <li><Link to="/admin">Dashboard</Link></li>
-            ) : user ? (
+            {user?.isAdmin && (
+              <li>
+                <Link to="/admin" style={{ color: '#d4a574', fontWeight: 'bold' }}>Dashboard</Link>
+              </li>
+            )}
+            {user ? (
               <li className="user-menu">
                 <span className="user-name">{user.firstName || 'User'}</span>
                 <button onClick={handleLogout}>Logout</button>
               </li>
             ) : (
               <li><Link to="/login">Login</Link></li>
-)}
+            )}
             </ul>
             <button 
               onClick={() => navigate('/cart')}
@@ -231,7 +234,7 @@ function Nav() {
             {cartCount > 0 && <span className="sidebar-cart-badge">{cartCount}</span>}
           </button>
 
-          {user?.email === 'hamzaelsharkh@gmail.com' && (
+          {user?.isAdmin && (
             <Link to="/admin" className="sidebar-action-btn dashboard-btn" onClick={() => setIsOpen(false)}>
               <span>📊</span>
               <span>Dashboard</span>

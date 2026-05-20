@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { auth } from '../firebase';
 import '../styles/ForgotPasswordPage.css';
 
 function ForgotPasswordPage() {
   const [step, setStep] = useState(1);
-  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -16,25 +17,51 @@ function ForgotPasswordPage() {
   const navigate = useNavigate();
   const { showPopup } = useAuth();
 
+  useEffect(() => {
+    return () => {
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.clear();
+        window.recaptchaVerifier = null;
+      }
+    };
+  }, []);
+
   const handleSendOTP = async (e) => {
     e.preventDefault();
     setErrors({});
     
-    if (!email || !email.includes('@')) {
-      setErrors({ email: 'Enter a valid email address' });
+    if (!phoneNumber || !phoneNumber.startsWith('+') || phoneNumber.length < 8) {
+      setErrors({ phoneNumber: 'Enter a valid phone number with country code (e.g., +1234567890)' });
       return;
     }
 
     setLoading(true);
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'https://restaurant-website-react-back-5k53kprwm.vercel.app/api';
-      await axios.post(`${apiUrl}/auth/send-otp`, { email });
-      showPopup('OTP sent to your email!');
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          'size': 'invisible',
+          'callback': (response) => {}
+        });
+      }
+
+      const appVerifier = window.recaptchaVerifier;
+      const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+      
+      window.confirmationResult = confirmationResult;
+      showPopup('OTP sent! Check your phone.');
       setStep(2);
     } catch (error) {
       console.error('Error sending OTP:', error);
-      const errorMsg = error.response?.data?.message || error.message || 'Failed to send OTP';
+      let errorMsg = error.message || 'Failed to send OTP';
+      if (error.code === 'auth/invalid-phone-number') {
+        errorMsg = 'Invalid phone number format.';
+      }
       setErrors({ general: errorMsg });
+      
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.clear();
+        window.recaptchaVerifier = null;
+      }
     } finally {
       setLoading(false);
     }
@@ -43,23 +70,19 @@ function ForgotPasswordPage() {
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     setErrors({});
-    if (!otp || otp.length !== 6) {
+    if (!otp || otp.length < 6) {
       setErrors({ otp: 'Enter the 6-digit OTP' });
       return;
     }
 
     setLoading(true);
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'https://restaurant-website-react-back-5k53kprwm.vercel.app/api';
-      const res = await axios.post(`${apiUrl}/auth/verify-otp`, { email, otp });
-      
-      if (res.data.success) {
-        showPopup('Password reset! Set your new password.');
-        navigate('/reset-password', { state: { email } });
-      }
+      await window.confirmationResult.confirm(otp);
+      showPopup('Verified and logged in successfully!');
+      navigate('/');
     } catch (error) {
       console.error('Error verifying OTP:', error);
-      const errorMsg = error.response?.data?.message || 'Invalid OTP';
+      const errorMsg = error.message || 'Invalid OTP';
       setErrors({ general: errorMsg });
     } finally {
       setLoading(false);
@@ -72,34 +95,37 @@ function ForgotPasswordPage() {
       <section className="hero static" style={{ minHeight: '40vh' }}>
         <div className="hero-bg"></div>
         <div className="hero-content">
-          <p className="hero-tag">Email Authentication</p>
-          <h1 className="hero-title" style={{ fontSize: '48px' }}>Forgot Password</h1>
+          <p className="hero-tag">Phone Authentication</p>
+          <h1 className="hero-title" style={{ fontSize: '48px' }}>Log In / Recover</h1>
         </div>
       </section>
 
       <section className="login-section">
         <div className="container">
           <div className="login-card forgot-password-card">
+            <div id="recaptcha-container"></div>
+
             {step === 1 && (
               <form className="login-form" onSubmit={handleSendOTP}>
-                <h3>Forgot Password?</h3>
-                <p className="form-desc">Enter your email for a 6-digit verification code.</p>
+                <h3>Phone Verification</h3>
+                <p className="form-desc">Enter your phone number (with country code) to receive a secure code.</p>
                 {errors.general && <div className="field-error center-error">{errors.general}</div>}
                 
                 <div className="form-group">
                   <input 
-                    type="email" 
-                    id="email" 
-                    value={email}
-                    onChange={(e) => { setEmail(e.target.value); setErrors({...errors, email: null, general: null}); }}
-                    required placeholder=" " className={errors.email ? 'error-input' : ''}
+                    type="tel" 
+                    id="phoneNumber" 
+                    value={phoneNumber}
+                    onChange={(e) => { setPhoneNumber(e.target.value); setErrors({...errors, phoneNumber: null, general: null}); }}
+                    required placeholder=" " className={errors.phoneNumber ? 'error-input' : ''}
+                    dir="ltr"
                   />
-                  <label htmlFor="email">Email Address</label>
-                  {errors.email && <span className="field-error">{errors.email}</span>}
+                  <label htmlFor="phoneNumber">Phone Number (e.g. +123...)</label>
+                  {errors.phoneNumber && <span className="field-error">{errors.phoneNumber}</span>}
                 </div>
                 
                 <button type="submit" className="form-submit" disabled={loading}>
-                  {loading ? 'Sending...' : 'Send OTP'}
+                  {loading ? 'Sending...' : 'Send SMS Code'}
                 </button>
                 <p className="login-link"><Link to="/login">Back to Login</Link></p>
               </form>
@@ -108,7 +134,7 @@ function ForgotPasswordPage() {
             {step === 2 && (
               <form className="login-form" onSubmit={handleVerifyOTP}>
                 <h3>Enter Verification Code</h3>
-                <p className="form-desc">Code sent to <strong>{email}</strong></p>
+                <p className="form-desc">Code sent to <strong>{phoneNumber}</strong></p>
                 {errors.general && <div className="field-error center-error">{errors.general}</div>}
                 
                 <div className="form-group otp-group">
@@ -129,10 +155,10 @@ function ForgotPasswordPage() {
                 </div>
                 
                 <button type="submit" className="form-submit" disabled={loading || otp.length < 6}>
-                  {loading ? 'Verifying...' : 'Verify OTP'}
+                  {loading ? 'Verifying...' : 'Verify & Log In'}
                 </button>
                 
-                <p className="login-link"><Link to="#" onClick={() => { setStep(1); setOtp(''); }}>Change Email</Link></p>
+                <p className="login-link"><Link to="#" onClick={() => { setStep(1); setOtp(''); }}>Change Phone Number</Link></p>
               </form>
             )}
           </div>
