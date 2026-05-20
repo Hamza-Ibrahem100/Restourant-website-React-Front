@@ -387,25 +387,6 @@ const checkApiHealth = async () => {
   }
 };
 
-// ─── OTP Password Reset ───────────────────────────────────────────────────────
-
-/** Step 1 — request a 6-digit OTP to be emailed */
-const sendOtp = async (email) => {
-  const res = await api.post('/auth/send-otp', { email });
-  return res.data;
-};
-
-/** Step 2 — submit the OTP code; returns { resetToken } on success */
-const verifyOtp = async (email, otp) => {
-  const res = await api.post('/auth/verify-otp', { email, otp });
-  return res.data;
-};
-
-/** Step 3 — set a new password using the reset token from step 2 */
-const resetPassword = async (email, resetToken, newPassword) => {
-  const res = await api.post('/auth/reset-password', { email, resetToken, newPassword });
-  return res.data;
-};
 
 /** Legacy: direct Firebase reset link (kept for potential future use) */
 const sendForgotPasswordEmail = async (email) => {
@@ -442,9 +423,6 @@ export const dataService = {
   deleteUser,
   bulkDeleteUsers,
   sendForgotPasswordEmail,
-  sendOtp,
-  verifyOtp,
-  resetPassword,
   // Authorized Users
   getAuthorizedUsers,
   addAuthorizedUser,

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
-import { signInWithEmailAndPassword, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider, facebookProvider } from '../firebase';
 import { dataService } from '../services/dataService';
 
