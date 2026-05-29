@@ -7,6 +7,7 @@ import { dataService } from '../services/dataService';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useMenu } from '../hooks/useFirebaseData';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import '../styles/HomePage.css';
 
 function HomePage() {
@@ -122,7 +123,7 @@ function HomePage() {
               viewport={{ once: true }}
               variants={fadeUpVariant}
             >
-              <img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80" alt="Food Lover restaurant interior" />
+              <img src={getOptimizedImageUrl("https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80", 800, 70)} alt="Food Lover restaurant interior" />
             </motion.div>
             <motion.div 
               className="about-content"
@@ -173,7 +174,7 @@ function HomePage() {
             <div className="specials-banner-grid">
               {menuItems.filter(i => i.category === 'specials' && i.is_available !== false && !i.is_hidden).slice(0, 4).map(item => (
                 <div key={item.id} className="specials-banner-item">
-                  <img src={item.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=80&q=50'} alt={item.name} loading="lazy" className="specials-banner-img" />
+                  <img src={getOptimizedImageUrl(item.image, 120, 50)} alt={item.name} loading="lazy" className="specials-banner-img" />
                   <div className="specials-banner-info">
                     <div className="specials-banner-name">{item.name}</div>
                     <div className="specials-banner-price">${item.price}</div>
@@ -233,7 +234,7 @@ function HomePage() {
                     <div className="menu-card-image" style={{ background: '#f5f5f5' }}>
                       {item.image ? (
                         <img 
-                          src={item.image} 
+                          src={getOptimizedImageUrl(item.image, 400, 60)} 
                           alt={item.name} 
                           loading="lazy"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -345,7 +346,7 @@ function HomePage() {
               viewport={{ once: true }}
               transition={{ duration: 0.5 }}
             >
-              <img src="https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80" alt="Private event dining" />
+              <img src={getOptimizedImageUrl("https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80", 800, 70)} alt="Private event dining" />
             </motion.div>
             <motion.div 
               className="events-content"
@@ -430,7 +431,7 @@ function HomePage() {
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
               >
-                <img src={img} alt={`Gallery item ${index}`} />
+                <img src={getOptimizedImageUrl(img, 400, 60)} alt={`Gallery item ${index}`} />
               </motion.div>
             ))}
           </div>

@@ -6,7 +6,10 @@
 import axios from 'axios';
 import { auth } from '../firebase';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://restaurant-website-react-back-abetxibag.vercel.app/api';
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE_URL = isLocal 
+  ? 'http://localhost:5000/api'
+  : (process.env.REACT_APP_API_URL || 'https://restaurant-website-react-back-abetxibag.vercel.app/api');
 
 const api = axios.create({
   baseURL: API_BASE_URL,

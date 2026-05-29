@@ -38,8 +38,8 @@ async function withFallback(apiFn, firebaseFn) {
   try {
     return await apiFn();
   } catch (err) {
-    if (isNetworkError(err)) {
-      console.warn('⚠️ Express API unreachable — falling back to Firebase:', err.message);
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      console.warn('⚠️ Express API unreachable or server error — falling back to Firebase:', err.message);
       return await firebaseFn();
     }
     throw err;
@@ -96,64 +96,86 @@ const getMenu = () =>
     }
   );
 
-const addMenuItem = (item) =>
-  withFallback(
-    async () => {
-      const res = await api.post('/menu', item);
-      return res.data;
-    },
-    async () => {
+const addMenuItem = async (item) => {
+  try {
+    const res = await api.post('/menu', item);
+    // Sync with Firebase to keep real-time listeners happy
+    try {
+      if (res.data && res.data.id) {
+        const itemRef = ref(firebaseDB, `menu/${res.data.id}`);
+        await update(itemRef, { ...item, id: res.data.id, createdAt: Date.now() });
+      }
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      console.warn('⚠️ Express API unreachable or server error — falling back to Firebase:', err.message);
       const newRef = push(ref(firebaseDB, 'menu'));
       await update(newRef, { ...item, createdAt: Date.now() });
       return { id: newRef.key, ...item };
     }
-  );
+    throw err;
+  }
+};
 
-const updateMenuItem = (id, updates) =>
-  withFallback(
-    async () => {
-      const res = await api.put(`/menu/${id}`, updates);
-      return res.data;
-    },
-    async () => {
+const updateMenuItem = async (id, updates) => {
+  try {
+    const res = await api.put(`/menu/${id}`, updates);
+    try {
+      await update(ref(firebaseDB, `menu/${id}`), { ...updates, updatedAt: Date.now() });
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
       await update(ref(firebaseDB, `menu/${id}`), { ...updates, updatedAt: Date.now() });
       return { id, ...updates };
     }
-  );
+    throw err;
+  }
+};
 
-const deleteMenuItem = (id) =>
-  withFallback(
-    async () => {
-      const res = await api.delete(`/menu/${id}`);
-      return res.data;
-    },
-    () => remove(ref(firebaseDB, `menu/${id}`))
-  );
+const deleteMenuItem = async (id) => {
+  try {
+    const res = await api.delete(`/menu/${id}`);
+    try { await remove(ref(firebaseDB, `menu/${id}`)); } catch(e) {}
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      return remove(ref(firebaseDB, `menu/${id}`));
+    }
+    throw err;
+  }
+};
 
-const bulkDeleteMenuItems = (ids) =>
-  withFallback(
-    async () => {
-      const res = await api.delete('/menu/bulk', { data: { ids } });
-      return res.data;
-    },
-    () => Promise.all(ids.map(id => remove(ref(firebaseDB, `menu/${id}`))))
-  );
+const bulkDeleteMenuItems = async (ids) => {
+  try {
+    const res = await api.delete('/menu/bulk', { data: { ids } });
+    try {
+      await Promise.all(ids.map(id => remove(ref(firebaseDB, `menu/${id}`))));
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await Promise.all(ids.map(id => remove(ref(firebaseDB, `menu/${id}`))));
+      return { deleted: ids.length };
+    }
+    throw err;
+  }
+};
 
 // Upload an image file — returns { fullUrl, thumbnailUrl }
 const uploadMenuImage = async (file) => {
-  // Try Express backend first (multipart upload)
   try {
     const formData = new FormData();
     formData.append('image', file);
     const res = await api.post('/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 30000 // uploads can take longer
+      timeout: 30000
     });
-    return res.data; // { fullUrl, thumbnailUrl }
+    return res.data;
   } catch (err) {
-    if (isNetworkError(err)) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
       console.warn('⚠️ Upload API unreachable — falling back to Firebase Storage');
-      // Dynamic import to avoid loading Firebase Storage when not needed
       const { getStorage, ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
       const { storage } = await import('../firebase');
       const imageCompression = (await import('browser-image-compression')).default;
@@ -190,44 +212,72 @@ const getOrders = (limit = 100) =>
     }
   );
 
-const createOrder = (orderData) =>
-  withFallback(
-    async () => {
-      const res = await api.post('/orders', orderData);
-      return res.data;
-    },
-    async () => {
-      const newRef = await push(ref(firebaseDB, 'orders'), { ...orderData, createdAt: Date.now() });
+const createOrder = async (orderData) => {
+  try {
+    const res = await api.post('/orders', orderData);
+    try {
+      if (res.data && res.data.id) {
+        await update(ref(firebaseDB, `orders/${res.data.id}`), { ...orderData, id: res.data.id, createdAt: Date.now() });
+      }
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      const newRef = push(ref(firebaseDB, 'orders'));
+      await update(newRef, { ...orderData, createdAt: Date.now() });
       return { id: newRef.key, ...orderData };
     }
-  );
+    throw err;
+  }
+};
 
-const updateOrderStatus = (id, status, extra = {}) =>
-  withFallback(
-    async () => {
-      const res = await api.put(`/orders/${id}/status`, { status, ...extra });
-      return res.data;
-    },
-    () => update(ref(firebaseDB, `orders/${id}`), { status, ...extra, updatedAt: Date.now() })
-  );
+const updateOrderStatus = async (id, status, extra = {}) => {
+  try {
+    const res = await api.put(`/orders/${id}/status`, { status, ...extra });
+    try {
+      await update(ref(firebaseDB, `orders/${id}`), { status, ...extra, updatedAt: Date.now() });
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await update(ref(firebaseDB, `orders/${id}`), { status, ...extra, updatedAt: Date.now() });
+      return { id, status, ...extra };
+    }
+    throw err;
+  }
+};
 
-const deleteOrder = (id) =>
-  withFallback(
-    async () => {
-      const res = await api.delete(`/orders/${id}`);
-      return res.data;
-    },
-    () => remove(ref(firebaseDB, `orders/${id}`))
-  );
+const deleteOrder = async (id) => {
+  try {
+    const res = await api.delete(`/orders/${id}`);
+    try {
+      await remove(ref(firebaseDB, `orders/${id}`));
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await remove(ref(firebaseDB, `orders/${id}`));
+      return { deleted: id };
+    }
+    throw err;
+  }
+};
 
-const bulkDeleteOrders = (ids) =>
-  withFallback(
-    async () => {
-      const res = await api.delete('/orders/bulk', { data: { ids } });
-      return res.data;
-    },
-    () => Promise.all(ids.map(id => remove(ref(firebaseDB, `orders/${id}`))))
-  );
+const bulkDeleteOrders = async (ids) => {
+  try {
+    const res = await api.delete('/orders/bulk', { data: { ids } });
+    try {
+      await Promise.all(ids.map(id => remove(ref(firebaseDB, `orders/${id}`))));
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await Promise.all(ids.map(id => remove(ref(firebaseDB, `orders/${id}`))));
+      return { deleted: ids.length };
+    }
+    throw err;
+  }
+};
 
 // ─── Reservations ─────────────────────────────────────────────────────────────
 
@@ -243,44 +293,72 @@ const getReservations = (limit = 100) =>
     }
   );
 
-const createReservation = (data) =>
-  withFallback(
-    async () => {
-      const res = await api.post('/reservations', data);
-      return res.data;
-    },
-    async () => {
-      const newRef = await push(ref(firebaseDB, 'reservations'), { ...data, createdAt: Date.now() });
+const createReservation = async (data) => {
+  try {
+    const res = await api.post('/reservations', data);
+    try {
+      if (res.data && res.data.id) {
+        await update(ref(firebaseDB, `reservations/${res.data.id}`), { ...data, id: res.data.id, createdAt: Date.now() });
+      }
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      const newRef = push(ref(firebaseDB, 'reservations'));
+      await update(newRef, { ...data, createdAt: Date.now() });
       return { id: newRef.key, ...data };
     }
-  );
+    throw err;
+  }
+};
 
-const updateReservationStatus = (id, status) =>
-  withFallback(
-    async () => {
-      const res = await api.put(`/reservations/${id}/status`, { status });
-      return res.data;
-    },
-    () => update(ref(firebaseDB, `reservations/${id}`), { status, updatedAt: Date.now() })
-  );
+const updateReservationStatus = async (id, status) => {
+  try {
+    const res = await api.put(`/reservations/${id}/status`, { status });
+    try {
+      await update(ref(firebaseDB, `reservations/${id}`), { status, updatedAt: Date.now() });
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await update(ref(firebaseDB, `reservations/${id}`), { status, updatedAt: Date.now() });
+      return { id, status };
+    }
+    throw err;
+  }
+};
 
-const deleteReservation = (id) =>
-  withFallback(
-    async () => {
-      const res = await api.delete(`/reservations/${id}`);
-      return res.data;
-    },
-    () => remove(ref(firebaseDB, `reservations/${id}`))
-  );
+const deleteReservation = async (id) => {
+  try {
+    const res = await api.delete(`/reservations/${id}`);
+    try {
+      await remove(ref(firebaseDB, `reservations/${id}`));
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await remove(ref(firebaseDB, `reservations/${id}`));
+      return { deleted: id };
+    }
+    throw err;
+  }
+};
 
-const bulkDeleteReservations = (ids) =>
-  withFallback(
-    async () => {
-      const res = await api.delete('/reservations/bulk', { data: { ids } });
-      return res.data;
-    },
-    () => Promise.all(ids.map(id => remove(ref(firebaseDB, `reservations/${id}`))))
-  );
+const bulkDeleteReservations = async (ids) => {
+  try {
+    const res = await api.delete('/reservations/bulk', { data: { ids } });
+    try {
+      await Promise.all(ids.map(id => remove(ref(firebaseDB, `reservations/${id}`))));
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await Promise.all(ids.map(id => remove(ref(firebaseDB, `reservations/${id}`))));
+      return { deleted: ids.length };
+    }
+    throw err;
+  }
+};
 
 // ─── Users / Customers ───────────────────────────────────────────────────────
 
@@ -296,44 +374,72 @@ const getUsers = () =>
     }
   );
 
-const addUser = (userData) =>
-  withFallback(
-    async () => {
-      const res = await api.post('/users', userData);
-      return res.data;
-    },
-    async () => {
-      const newRef = await push(ref(firebaseDB, 'users'), { ...userData, createdAt: Date.now() });
+const addUser = async (userData) => {
+  try {
+    const res = await api.post('/users', userData);
+    try {
+      if (res.data && res.data.id) {
+        await update(ref(firebaseDB, `users/${res.data.id}`), { ...userData, id: res.data.id, createdAt: Date.now() });
+      }
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      const newRef = push(ref(firebaseDB, 'users'));
+      await update(newRef, { ...userData, createdAt: Date.now() });
       return { id: newRef.key, ...userData };
     }
-  );
+    throw err;
+  }
+};
 
-const updateUser = (id, updates) =>
-  withFallback(
-    async () => {
-      const res = await api.put(`/users/${id}`, updates);
-      return res.data;
-    },
-    () => update(ref(firebaseDB, `users/${id}`), { ...updates, updatedAt: Date.now() })
-  );
+const updateUser = async (id, updates) => {
+  try {
+    const res = await api.put(`/users/${id}`, updates);
+    try {
+      await update(ref(firebaseDB, `users/${id}`), { ...updates, updatedAt: Date.now() });
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await update(ref(firebaseDB, `users/${id}`), { ...updates, updatedAt: Date.now() });
+      return { id, ...updates };
+    }
+    throw err;
+  }
+};
 
-const deleteUser = (id) =>
-  withFallback(
-    async () => {
-      const res = await api.delete(`/users/${id}`);
-      return res.data;
-    },
-    () => remove(ref(firebaseDB, `users/${id}`))
-  );
+const deleteUser = async (id) => {
+  try {
+    const res = await api.delete(`/users/${id}`);
+    try {
+      await remove(ref(firebaseDB, `users/${id}`));
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await remove(ref(firebaseDB, `users/${id}`));
+      return { deleted: id };
+    }
+    throw err;
+  }
+};
 
-const bulkDeleteUsers = (ids) =>
-  withFallback(
-    async () => {
-      const res = await api.delete('/users/bulk', { data: { ids } });
-      return res.data;
-    },
-    () => Promise.all(ids.map(id => remove(ref(firebaseDB, `users/${id}`))))
-  );
+const bulkDeleteUsers = async (ids) => {
+  try {
+    const res = await api.delete('/users/bulk', { data: { ids } });
+    try {
+      await Promise.all(ids.map(id => remove(ref(firebaseDB, `users/${id}`))));
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await Promise.all(ids.map(id => remove(ref(firebaseDB, `users/${id}`))));
+      return { deleted: ids.length };
+    }
+    throw err;
+  }
+};
 
 // ─── Authorized Users (Admin) ─────────────────────────────────────────────────
 
@@ -349,15 +455,19 @@ const getAuthorizedUsers = () =>
     }
   );
 
-const addAuthorizedUser = (email) =>
-  withFallback(
-    async () => {
-      // Support comma/space separated bulk input
-      const emails = email.split(/[\s,]+/).filter(e => e.trim());
-      const res = await api.post('/authorized-users', { emails });
-      return res.data;
-    },
-    async () => {
+const addAuthorizedUser = async (email) => {
+  try {
+    const emails = email.split(/[\s,]+/).filter(e => e.trim());
+    const res = await api.post('/authorized-users', { emails });
+    try {
+      const promises = emails.map(e =>
+        push(ref(firebaseDB, 'authorized_users'), { email: e.toLowerCase(), addedAt: Date.now() })
+      );
+      await Promise.all(promises);
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
       const emails = email.split(/[\s,]+/).filter(e => e.trim());
       const promises = emails.map(e =>
         push(ref(firebaseDB, 'authorized_users'), { email: e.toLowerCase(), addedAt: Date.now() })
@@ -365,16 +475,25 @@ const addAuthorizedUser = (email) =>
       await Promise.all(promises);
       return { inserted: emails.length };
     }
-  );
+    throw err;
+  }
+};
 
-const removeAuthorizedUser = (id) =>
-  withFallback(
-    async () => {
-      const res = await api.delete(`/authorized-users/${id}`);
-      return res.data;
-    },
-    () => remove(ref(firebaseDB, `authorized_users/${id}`))
-  );
+const removeAuthorizedUser = async (id) => {
+  try {
+    const res = await api.delete(`/authorized-users/${id}`);
+    try {
+      await remove(ref(firebaseDB, `authorized_users/${id}`));
+    } catch(e) { console.warn('Firebase sync failed', e); }
+    return res.data;
+  } catch (err) {
+    if (isNetworkError(err) || (err.response && err.response.status >= 500)) {
+      await remove(ref(firebaseDB, `authorized_users/${id}`));
+      return { deleted: id };
+    }
+    throw err;
+  }
+};
 
 // ─── Health check — used internally ──────────────────────────────────────────
 

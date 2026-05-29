@@ -307,6 +307,48 @@ function Dashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Check if user is typing in an input, textarea, select, or contenteditable element
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        activeEl.isContentEditable
+      );
+      
+      if (isInput) return; // Allow normal form navigation when in input fields
+
+      if (e.key === 'Tab') {
+        e.preventDefault(); // Prevent standard browser focus cycling
+        
+        // Define tabs order matching the render logic
+        const availableTabs = ['overview', 'customers', 'orders', 'reservations', 'requests', 'menu'];
+        if (isSuperAdmin) {
+          availableTabs.push('users');
+        }
+        availableTabs.push('analytics', 'reports', 'notifications');
+        
+        const currentIndex = availableTabs.indexOf(activeTab);
+        let nextIndex;
+        
+        if (e.shiftKey) {
+          // Shift+Tab cycles backward
+          nextIndex = (currentIndex - 1 + availableTabs.length) % availableTabs.length;
+        } else {
+          // Tab cycles forward
+          nextIndex = (currentIndex + 1) % availableTabs.length;
+        }
+        
+        setActiveTab(availableTabs[nextIndex]);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, isSuperAdmin]);
+
   const fetchAllData = async () => {
     console.log('fetchAllData called');
     const MENU_CACHE_KEY = 'foodlover_menu_cache';
@@ -352,12 +394,11 @@ function Dashboard() {
   };
 
 
-const addAuthorizedEmail = async () => {
+  const addAuthorizedEmail = async () => {
     if (!newAuthorizedEmail.trim()) return;
     try {
       await dataService.addAuthorizedUser(newAuthorizedEmail);
       setNewAuthorizedEmail('');
-      fetchAllData();
       const count = newAuthorizedEmail.split(/[\s,]+/).filter(e => e.trim()).length;
       alert(`${count} user(s) added successfully! They can now access the dashboard.`);
     } catch (error) {
@@ -370,7 +411,6 @@ const addAuthorizedEmail = async () => {
     if (window.confirm('Remove this authorized user?')) {
       try {
         await dataService.removeAuthorizedUser(id);
-        fetchAllData();
         alert('User removed successfully.');
       } catch (error) {
         console.error('Error removing authorized email:', error);
@@ -404,7 +444,6 @@ const addAuthorizedEmail = async () => {
           setNotifications(prev => prev.filter(n => n.entityId !== id));
         }
       }
-      fetchAllData();
     } catch (error) {
       console.error('Error updating:', error);
     }
@@ -417,7 +456,6 @@ const addAuthorizedEmail = async () => {
         else if (collectionName === 'reservations') await dataService.deleteReservation(id);
         else if (collectionName === 'menu') await dataService.deleteMenuItem(id);
         else if (collectionName === 'users') await dataService.deleteUser(id);
-        fetchAllData();
       } catch (error) {
         console.error('Error deleting:', error);
       }
@@ -430,7 +468,6 @@ const addAuthorizedEmail = async () => {
       setSelectedMenuItems([]);
       setShowDeleteModal(false);
       setDeleteItemId(null);
-      fetchAllData();
       localStorage.removeItem('foodlover_menu_cache');
     } catch (error) {
       console.error('Error bulk deleting menu items:', error);
@@ -444,7 +481,6 @@ const addAuthorizedEmail = async () => {
       setDeleteItemId(null);
       setDeleteType(null);
       setShowDeleteModal(false);
-      fetchAllData();
       localStorage.removeItem('foodlover_menu_cache');
     } catch (error) {
       console.error('Error deleting menu item:', error);
@@ -459,7 +495,6 @@ const addAuthorizedEmail = async () => {
       else if (type === 'reservations') { await dataService.bulkDeleteReservations(ids); setSelectedReservations([]); }
       setShowDeleteModal(false);
       setDeleteType(null);
-      fetchAllData();
     } catch (error) {
       console.error('Error bulk deleting:', error);
     }
@@ -475,7 +510,6 @@ const addAuthorizedEmail = async () => {
       setDeleteItemId(null);
       setDeleteType(null);
       setShowDeleteModal(false);
-      fetchAllData();
     } catch (error) {
       console.error('Error deleting:', error);
     }
@@ -490,7 +524,6 @@ const addAuthorizedEmail = async () => {
   const handleToggleAvailability = async (itemId, currentStatus) => {
     try {
       await dataService.updateMenuItem(itemId, { is_available: !currentStatus });
-      fetchAllData();
     } catch (error) {
       console.error('Error toggling availability:', error);
     }
@@ -561,7 +594,6 @@ const addAuthorizedEmail = async () => {
       if (fileInputRef.current) fileInputRef.current.value = '';
       
       localStorage.removeItem('foodlover_menu_cache');
-      fetchAllData();
       alert('Menu item added successfully!');
     } catch (error) {
       console.error('Error adding menu item:', error);
@@ -678,7 +710,6 @@ const addAuthorizedEmail = async () => {
         price: parseFloat(editingMenuItem.price)
       });
       setEditingMenuItem(null);
-      fetchAllData();
     } catch (error) {
       console.error('Error updating menu item:', error);
     }
@@ -692,7 +723,6 @@ const addAuthorizedEmail = async () => {
         loyalty_points: parseInt(newCustomer.loyalty_points) || 0
       });
       setNewCustomer({ name: '', email: '', phone: '', address: '', loyalty_points: 0 });
-      fetchAllData();
     } catch (error) {
       console.error('Error adding customer:', error);
     }
@@ -706,7 +736,6 @@ const addAuthorizedEmail = async () => {
         loyalty_points: parseInt(editingCustomer.loyalty_points) || 0
       });
       setEditingCustomer(null);
-      fetchAllData();
     } catch (error) {
       console.error('Error updating customer:', error);
     }
@@ -787,8 +816,7 @@ const addAuthorizedEmail = async () => {
 
   const updateStock = async (itemId, newStock) => {
     try {
-      await update(ref(db, `menu/${itemId}`), { stock: parseInt(newStock) });
-      fetchAllData();
+      await dataService.updateMenuItem(itemId, { stock: parseInt(newStock) });
     } catch (error) {
       console.error('Error updating stock:', error);
     }
@@ -1269,8 +1297,8 @@ const addAuthorizedEmail = async () => {
                           </td>
                           <td style={{ padding: '12px' }}>
                             <div style={{ display: 'flex', gap: '6px' }}>
-                              <button onClick={() => update(ref(db, `reservations/${res.id}`), { status: 'confirmed' })} style={{ padding: '4px 10px', background: '#27ae60', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>Confirm</button>
-                              <button onClick={() => update(ref(db, `reservations/${res.id}`), { status: 'cancelled' })} style={{ padding: '4px 10px', background: '#e74c3c', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>Cancel</button>
+                              <button onClick={() => handleStatus('reservations', res.id, 'confirmed')} style={{ padding: '4px 10px', background: '#27ae60', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>Confirm</button>
+                              <button onClick={() => handleStatus('reservations', res.id, 'cancelled')} style={{ padding: '4px 10px', background: '#e74c3c', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>Cancel</button>
                               <button onClick={() => confirmDelete('reservations', res.id)} style={{ padding: '4px 10px', background: '#e74c3c', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '4px', fontSize: '12px' }}>🗑</button>
                             </div>
                           </td>
