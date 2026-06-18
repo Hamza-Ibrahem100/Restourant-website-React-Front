@@ -395,15 +395,18 @@ function Dashboard() {
 
 
   const addAuthorizedEmail = async () => {
-    if (!newAuthorizedEmail.trim()) return;
+    if (!newAuthorizedEmail.trim() || submittingAuth) return; // idempotency guard
+    setSubmittingAuth(true);
     try {
       await dataService.addAuthorizedUser(newAuthorizedEmail);
-      setNewAuthorizedEmail('');
       const count = newAuthorizedEmail.split(/[\s,]+/).filter(e => e.trim()).length;
-      alert(`${count} user(s) added successfully! They can now access the dashboard.`);
+      setNewAuthorizedEmail('');
+      alert(`✅ ${count} user(s) added successfully! They can now access the dashboard.`);
     } catch (error) {
       console.error('Error adding authorized email:', error);
-      alert('Error adding user(s): ' + error.message);
+      alert('❌ Error adding user(s): ' + (error?.message || 'Unknown error'));
+    } finally {
+      setSubmittingAuth(false);
     }
   };
 
@@ -420,14 +423,29 @@ function Dashboard() {
   };
 
   const togglePublicDashboardAccess = async () => {
+    if (submittingAccess) return; // idempotency guard
+    setSubmittingAccess(true);
     try {
       const newValue = !publicDashboardAccess;
-      await set(ref(db, 'settings/publicDashboardAccess'), newValue);
+      // Optimistically update UI
       setPublicDashboardAccess(newValue);
-      alert(newValue ? 'Dashboard is now open to ALL registered users.' : 'Dashboard is now restricted to authorized users only.');
+      // Write to Firebase RTDB settings node
+      await set(ref(db, 'settings/publicDashboardAccess'), newValue);
+      alert(newValue 
+        ? '✅ Dashboard is now open to ALL registered users.' 
+        : '🔒 Dashboard is now restricted to authorized users only.');
     } catch (error) {
+      // Revert optimistic update on failure
+      setPublicDashboardAccess(prev => !prev);
       console.error('Error updating settings:', error);
-      alert('Failed to update dashboard accessibility.');
+      const errMsg = error?.code || error?.message || 'Unknown error';
+      if (errMsg.includes('PERMISSION_DENIED') || errMsg.includes('permission-denied')) {
+        alert('❌ Permission denied. Firebase Security Rules are blocking this write.\n\nFix: In the Firebase Console → Realtime Database → Rules, make sure authenticated users can write to /settings.');
+      } else {
+        alert('❌ Failed to update dashboard accessibility.\nError: ' + errMsg);
+      }
+    } finally {
+      setSubmittingAccess(false);
     }
   };
 
@@ -445,7 +463,9 @@ function Dashboard() {
         }
       }
     } catch (error) {
-      console.error('Error updating:', error);
+      console.error('Error updating status:', error);
+      const msg = error?.response?.data?.error || error?.message || 'Unknown error';
+      alert('❌ Failed to update status: ' + msg);
     }
   };
 
@@ -454,15 +474,19 @@ function Dashboard() {
       try {
         if (collectionName === 'orders') await dataService.deleteOrder(id);
         else if (collectionName === 'reservations') await dataService.deleteReservation(id);
-        else if (collectionName === 'menu') await dataService.deleteMenuItem(id);
+        else if (collectionName === 'menu') { await dataService.deleteMenuItem(id); localStorage.removeItem('foodlover_menu_cache'); }
         else if (collectionName === 'users') await dataService.deleteUser(id);
       } catch (error) {
         console.error('Error deleting:', error);
+        const msg = error?.response?.data?.error || error?.message || 'Unknown error';
+        alert('❌ Failed to delete: ' + msg);
       }
     }
   };
 
   const handleBulkDeleteMenu = async () => {
+    if (confirmingDelete) return;
+    setConfirmingDelete(true);
     try {
       await dataService.bulkDeleteMenuItems(selectedMenuItems);
       setSelectedMenuItems([]);
@@ -471,11 +495,15 @@ function Dashboard() {
       localStorage.removeItem('foodlover_menu_cache');
     } catch (error) {
       console.error('Error bulk deleting menu items:', error);
+      alert('❌ Error deleting items: ' + (error?.message || 'Unknown error'));
+    } finally {
+      setConfirmingDelete(false);
     }
   };
 
   const handleSingleDeleteMenu = async () => {
-    if (!deleteItemId) return;
+    if (!deleteItemId || confirmingDelete) return;
+    setConfirmingDelete(true);
     try {
       await dataService.deleteMenuItem(deleteItemId);
       setDeleteItemId(null);
@@ -484,10 +512,15 @@ function Dashboard() {
       localStorage.removeItem('foodlover_menu_cache');
     } catch (error) {
       console.error('Error deleting menu item:', error);
+      alert('❌ Error deleting item: ' + (error?.message || 'Unknown error'));
+    } finally {
+      setConfirmingDelete(false);
     }
   };
 
   const handleBulkDelete = async (type, ids) => {
+    if (confirmingDelete) return;
+    setConfirmingDelete(true);
     try {
       if (type === 'menu') { await dataService.bulkDeleteMenuItems(ids); setSelectedMenuItems([]); localStorage.removeItem('foodlover_menu_cache'); }
       else if (type === 'users') { await dataService.bulkDeleteUsers(ids); setSelectedUsers([]); }
@@ -497,11 +530,15 @@ function Dashboard() {
       setDeleteType(null);
     } catch (error) {
       console.error('Error bulk deleting:', error);
+      alert('❌ Error deleting: ' + (error?.message || 'Unknown error'));
+    } finally {
+      setConfirmingDelete(false);
     }
   };
 
   const handleSingleDelete = async (type, id) => {
-    if (!id) return;
+    if (!id || confirmingDelete) return;
+    setConfirmingDelete(true);
     try {
       if (type === 'menu') { await dataService.deleteMenuItem(id); localStorage.removeItem('foodlover_menu_cache'); }
       else if (type === 'users') await dataService.deleteUser(id);
@@ -512,6 +549,9 @@ function Dashboard() {
       setShowDeleteModal(false);
     } catch (error) {
       console.error('Error deleting:', error);
+      alert('❌ Error deleting: ' + (error?.message || 'Unknown error'));
+    } finally {
+      setConfirmingDelete(false);
     }
   };
 
@@ -532,6 +572,14 @@ function Dashboard() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef(null);
 
+  // ── Idempotency guards: prevent double-click on every async action ──────────
+  const [submittingMenu, setSubmittingMenu] = useState(false);     // Add / Update menu item
+  const [submittingCustomer, setSubmittingCustomer] = useState(false); // Add / Update customer
+  const [submittingAccess, setSubmittingAccess] = useState(false); // Public access toggle
+  const [submittingAuth, setSubmittingAuth] = useState(false);     // Add authorized user
+  const [deletingId, setDeletingId] = useState(null);              // Track which id is being deleted
+  const [confirmingDelete, setConfirmingDelete] = useState(false); // Confirm-modal delete button
+
   const uploadImage = async (file) => {
     if (!file) return { fullUrl: null, thumbnailUrl: null };
     setUploadingImage(true);
@@ -547,30 +595,38 @@ function Dashboard() {
   };
 
   const handleAddMenuItem = async () => {
-    if (!newMenuItem.name) {
+    if (submittingMenu) return; // idempotency guard
+    if (!newMenuItem.name || !newMenuItem.name.trim()) {
       alert('Please enter item name');
       return;
     }
-    if (!newMenuItem.price) {
+    // Check price: must be a non-empty string that parses to a valid number >= 0
+    const parsedPrice = parseFloat(newMenuItem.price);
+    if (newMenuItem.price === '' || newMenuItem.price === null || newMenuItem.price === undefined) {
       alert('Please enter item price');
       return;
     }
+    if (isNaN(parsedPrice) || parsedPrice < 0) {
+      alert('Please enter a valid price (e.g. 9.99)');
+      return;
+    }
+    setSubmittingMenu(true);
     try {
       let imageUrl = '';
       let thumbnailUrl = '';
       
       if (selectedImage) {
-        const { fullUrl, thumbnailUrl: thumbUrl } = await uploadImage(selectedImage);
-        imageUrl = fullUrl || '';
-        thumbnailUrl = thumbUrl || '';
-      } else if (newMenuItem.image) {
-        imageUrl = newMenuItem.image;
-        thumbnailUrl = newMenuItem.image;
+        const uploadResult = await uploadImage(selectedImage);
+        imageUrl = uploadResult?.fullUrl || '';
+        thumbnailUrl = uploadResult?.thumbnailUrl || '';
+      } else if (newMenuItem.image && newMenuItem.image.trim()) {
+        imageUrl = newMenuItem.image.trim();
+        thumbnailUrl = newMenuItem.image.trim();
       }
 
       await dataService.addMenuItem({
-        name: newMenuItem.name,
-        price: parseFloat(newMenuItem.price),
+        name: newMenuItem.name.trim(),
+        price: parsedPrice,
         category: newMenuItem.category || 'mains',
         description: newMenuItem.description || '',
         is_available: true,
@@ -594,10 +650,13 @@ function Dashboard() {
       if (fileInputRef.current) fileInputRef.current.value = '';
       
       localStorage.removeItem('foodlover_menu_cache');
-      alert('Menu item added successfully!');
+      alert('✅ Menu item added successfully!');
     } catch (error) {
       console.error('Error adding menu item:', error);
-      alert('Error adding menu item: ' + error.message);
+      const msg = error?.response?.data?.error || error?.message || 'Unknown error';
+      alert('❌ Error adding menu item: ' + msg);
+    } finally {
+      setSubmittingMenu(false);
     }
   };
 
@@ -703,41 +762,93 @@ function Dashboard() {
 
 
   const handleUpdateMenuItem = async () => {
-    if (!editingMenuItem) return;
+    if (!editingMenuItem || submittingMenu) return; // idempotency guard
+    const parsedPrice = parseFloat(editingMenuItem.price);
+    if (!editingMenuItem.name || !editingMenuItem.name.trim()) {
+      alert('Item name cannot be empty');
+      return;
+    }
+    if (isNaN(parsedPrice) || parsedPrice < 0) {
+      alert('Please enter a valid price');
+      return;
+    }
+    setSubmittingMenu(true);
     try {
       await dataService.updateMenuItem(editingMenuItem.id, {
-        ...editingMenuItem,
-        price: parseFloat(editingMenuItem.price)
+        name: editingMenuItem.name.trim(),
+        price: parsedPrice,
+        category: editingMenuItem.category,
+        description: editingMenuItem.description || '',
+        image: editingMenuItem.image || '',
+        thumbnail: editingMenuItem.thumbnail || editingMenuItem.image || '',
+        is_available: editingMenuItem.is_available,
+        is_hidden: editingMenuItem.is_hidden || false,
+        stock: parseInt(editingMenuItem.stock) || 0,
       });
       setEditingMenuItem(null);
+      alert('✅ Menu item updated successfully!');
     } catch (error) {
       console.error('Error updating menu item:', error);
+      const msg = error?.response?.data?.error || error?.message || 'Unknown error';
+      alert('❌ Error updating menu item: ' + msg);
+    } finally {
+      setSubmittingMenu(false);
     }
   };
 
   const handleAddCustomer = async () => {
-    if (!newCustomer.name || !newCustomer.email) return;
+    if (submittingCustomer) return; // idempotency guard
+    if (!newCustomer.name || !newCustomer.name.trim()) {
+      alert('Please enter customer name');
+      return;
+    }
+    if (!newCustomer.email || !newCustomer.email.includes('@')) {
+      alert('Please enter a valid email address');
+      return;
+    }
+    setSubmittingCustomer(true);
     try {
       await dataService.addUser({
-        ...newCustomer,
+        name: newCustomer.name.trim(),
+        email: newCustomer.email.trim(),
+        phone: newCustomer.phone || '',
+        address: newCustomer.address || '',
         loyalty_points: parseInt(newCustomer.loyalty_points) || 0
       });
       setNewCustomer({ name: '', email: '', phone: '', address: '', loyalty_points: 0 });
+      alert('✅ Customer added successfully!');
     } catch (error) {
       console.error('Error adding customer:', error);
+      const msg = error?.response?.data?.error || error?.message || 'Unknown error';
+      alert('❌ Error adding customer: ' + msg);
+    } finally {
+      setSubmittingCustomer(false);
     }
   };
 
   const handleUpdateCustomer = async () => {
-    if (!editingCustomer) return;
+    if (!editingCustomer || submittingCustomer) return; // idempotency guard
+    if (!editingCustomer.name || !editingCustomer.name.trim()) {
+      alert('Customer name cannot be empty');
+      return;
+    }
+    setSubmittingCustomer(true);
     try {
       await dataService.updateUser(editingCustomer.id, {
-        ...editingCustomer,
+        name: editingCustomer.name.trim(),
+        email: editingCustomer.email,
+        phone: editingCustomer.phone || '',
+        address: editingCustomer.address || '',
         loyalty_points: parseInt(editingCustomer.loyalty_points) || 0
       });
       setEditingCustomer(null);
+      alert('✅ Customer updated successfully!');
     } catch (error) {
       console.error('Error updating customer:', error);
+      const msg = error?.response?.data?.error || error?.message || 'Unknown error';
+      alert('❌ Error updating customer: ' + msg);
+    } finally {
+      setSubmittingCustomer(false);
     }
   };
 
@@ -1061,11 +1172,11 @@ function Dashboard() {
                 <div>
                   {editingCustomer ? (
                     <>
-                      <button onClick={handleUpdateCustomer} style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: 'pointer', marginRight: '12px' }}>Update Customer</button>
-                      <button onClick={() => setEditingCustomer(null)} style={{ padding: '12px 24px', background: 'transparent', border: '1px solid var(--secondary-accent)', color: 'var(--text-primary)', cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={handleUpdateCustomer} disabled={submittingCustomer} style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: submittingCustomer ? 'not-allowed' : 'pointer', marginRight: '12px', opacity: submittingCustomer ? 0.7 : 1 }}>{submittingCustomer ? 'Saving...' : 'Update Customer'}</button>
+                      <button onClick={() => setEditingCustomer(null)} disabled={submittingCustomer} style={{ padding: '12px 24px', background: 'transparent', border: '1px solid var(--secondary-accent)', color: 'var(--text-primary)', cursor: 'pointer' }}>Cancel</button>
                     </>
                   ) : (
-                    <button onClick={handleAddCustomer} style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: 'pointer' }}>Add Customer</button>
+                    <button onClick={handleAddCustomer} disabled={submittingCustomer} style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: submittingCustomer ? 'not-allowed' : 'pointer', opacity: submittingCustomer ? 0.7 : 1 }}>{submittingCustomer ? 'Adding...' : 'Add Customer'}</button>
                   )}
                 </div>
               </div>
@@ -1489,12 +1600,14 @@ function Dashboard() {
                     <>
                       <button 
                         onClick={handleUpdateMenuItem} 
-                        style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: 'pointer', marginRight: '12px' }}
+                        disabled={submittingMenu}
+                        style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: submittingMenu ? 'not-allowed' : 'pointer', marginRight: '12px', opacity: submittingMenu ? 0.7 : 1 }}
                       >
-                        Update Item
+                        {submittingMenu ? 'Saving...' : 'Update Item'}
                       </button>
                       <button 
                         onClick={() => setEditingMenuItem(null)} 
+                        disabled={submittingMenu}
                         style={{ padding: '12px 24px', background: 'transparent', border: '1px solid var(--secondary-accent)', color: 'var(--text-primary)', cursor: 'pointer' }}
                       >
                         Cancel
@@ -1503,9 +1616,10 @@ function Dashboard() {
                   ) : (
                     <button 
                       onClick={handleAddMenuItem} 
-                      style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: 'pointer' }}
+                      disabled={submittingMenu || uploadingImage}
+                      style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: (submittingMenu || uploadingImage) ? 'not-allowed' : 'pointer', opacity: (submittingMenu || uploadingImage) ? 0.7 : 1 }}
                     >
-                      Add Item
+                      {uploadingImage ? 'Uploading Image...' : submittingMenu ? 'Adding...' : 'Add Item'}
                     </button>
                   )}
                 </div>
@@ -1615,17 +1729,19 @@ function Dashboard() {
                   </div>
                   <button 
                     onClick={togglePublicDashboardAccess}
+                    disabled={submittingAccess}
                     style={{ 
                       padding: '10px 20px', 
                       background: publicDashboardAccess ? '#e74c3c' : '#27ae60', 
                       color: 'white', 
                       border: 'none', 
-                      cursor: 'pointer', 
+                      cursor: submittingAccess ? 'not-allowed' : 'pointer', 
                       fontWeight: '600',
-                      borderRadius: '6px'
+                      borderRadius: '6px',
+                      opacity: submittingAccess ? 0.7 : 1
                     }}
                   >
-                    {publicDashboardAccess ? 'Disable Public Access' : 'Enable Public Access'}
+                    {submittingAccess ? 'Saving...' : (publicDashboardAccess ? 'Disable Public Access' : 'Enable Public Access')}
                   </button>
                 </div>
               </div>
@@ -1642,9 +1758,10 @@ function Dashboard() {
                   />
                   <button 
                     onClick={addAuthorizedEmail}
-                    style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: 'pointer', fontWeight: '600' }}
+                    disabled={submittingAuth || !newAuthorizedEmail.trim()}
+                    style={{ padding: '12px 24px', background: 'var(--primary-accent)', color: 'var(--bg-dark)', border: 'none', cursor: (submittingAuth || !newAuthorizedEmail.trim()) ? 'not-allowed' : 'pointer', fontWeight: '600', opacity: (submittingAuth || !newAuthorizedEmail.trim()) ? 0.7 : 1 }}
                   >
-                    Add User(s)
+                    {submittingAuth ? 'Adding...' : 'Add User(s)'}
                   </button>
                 </div>
               </div>
@@ -1936,9 +2053,10 @@ function Dashboard() {
                     handleBulkDelete(deleteType, ids);
                   }
                 }}
-                style={{ padding: '10px 20px', background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontWeight: '600', borderRadius: '6px' }}
+                disabled={confirmingDelete}
+                style={{ padding: '10px 20px', background: '#e74c3c', color: 'white', border: 'none', cursor: confirmingDelete ? 'not-allowed' : 'pointer', fontWeight: '600', borderRadius: '6px', opacity: confirmingDelete ? 0.7 : 1 }}
               >
-                Delete
+                {confirmingDelete ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

@@ -16,6 +16,7 @@ function HomePage() {
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState('all');
   const [visibleCount, setVisibleCount] = useState(12);
+  const [reservingTable, setReservingTable] = useState(false); // idempotency guard for reservation form
 
   const menuRef = useRef(null);
   const reservationRef = useRef(null);
@@ -48,14 +49,13 @@ function HomePage() {
 
   const handleReservation = async (e) => {
     e.preventDefault();
+    if (reservingTable) return; // idempotency guard — prevent double-submit
     if (!user) {
       alert("Please sign in to make a reservation.");
       navigate('/login');
       return;
     }
     const form = e.target;
-    const btn = form.querySelector('.form-submit');
-    btn.textContent = 'Saving...';
     
     const reservationData = {
       name: form.name.value,
@@ -68,11 +68,11 @@ function HomePage() {
       status: 'pending',
       createdAt: Date.now()
     };
-    
+
+    setReservingTable(true);
     try {
       await dataService.createReservation(reservationData);
-      btn.textContent = 'Success!';
-      alert('Reservation request submitted! We will confirm via email.');
+      alert('✅ Reservation request submitted! We will confirm via email.');
       form.reset();
       if (user) {
         form.name.value = `${user.firstName || ''} ${user.lastName || ''}`.trim();
@@ -84,10 +84,11 @@ function HomePage() {
       if (error.code === 'PERMISSION_DENIED') {
         errorMessage = 'Unable to save reservation. Please make sure you are logged in or try again.';
       } else if (error.message) {
-        errorMessage = `Error: ${error.message}`;
+        errorMessage = `❌ Error: ${error.message}`;
       }
       alert(errorMessage);
-      btn.textContent = 'Error! Try again';
+    } finally {
+      setReservingTable(false);
     }
   };
 
@@ -489,7 +490,9 @@ function HomePage() {
                 <label htmlFor="requests">Special Requests (Optional)</label>
               </div>
             </div>
-            <button type="submit" className="form-submit">Request Reservation</button>
+            <button type="submit" className="form-submit" disabled={reservingTable} style={{ opacity: reservingTable ? 0.7 : 1, cursor: reservingTable ? 'not-allowed' : 'pointer' }}>
+              {reservingTable ? 'Sending Request...' : 'Request Reservation'}
+            </button>
           </motion.form>
         </div>
       </section>

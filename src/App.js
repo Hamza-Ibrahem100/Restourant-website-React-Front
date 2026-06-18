@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import PaymentStatusPage from './pages/PaymentStatusPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import ScrollToTop from './components/ScrollToTop';
 import { useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 function App() {
@@ -35,6 +36,7 @@ function App() {
 
   return (
     <CartProvider>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/cart" element={<CartPage />} />

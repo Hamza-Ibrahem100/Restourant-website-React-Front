@@ -88,7 +88,7 @@ const getMenu = () =>
   withFallbackOrEmpty(
     async () => {
       const res = await api.get('/menu');
-      return res.data;
+      return Array.isArray(res.data) ? res.data : (res.data.data || []);
     },
     async () => {
       const snap = await get(ref(firebaseDB, 'menu'));
