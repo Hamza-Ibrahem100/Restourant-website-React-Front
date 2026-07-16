@@ -1,0 +1,29 @@
+{
+  "rules": {
+    ".read": true,
+    
+    "menu": {
+      ".write": "auth != null && auth.token.email != 'demo@example.com'"
+    },
+    
+    "settings": {
+      ".write": "auth != null && auth.token.email != 'demo@example.com'"
+    },
+    
+    "authorized_users": {
+      ".write": "auth != null && auth.token.email != 'demo@example.com'"
+    },
+
+    "users": {
+      ".write": "auth != null"
+    },
+
+    "orders": {
+      ".write": "auth != null"
+    },
+
+    "reservations": {
+      ".write": "auth != null"
+    }
+  }
+}

@@ -19,7 +19,7 @@ function App() {
   useEffect(() => {
     if (authLoading) return; // Wait until auth state is determined
 
-    const publicPaths = ['/register', '/login', '/payment-status', '/forgot-password'];
+    const publicPaths = ['/register', '/login', '/payment-status', '/forgot-password', '/cart'];
     const isPublicPath = publicPaths.includes(currentPath);
     const isHome = currentPath === '/';
     

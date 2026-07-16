@@ -128,7 +128,12 @@ function Nav() {
             )}
             {user ? (
               <li className="user-menu">
-                <span className="user-name">{user.firstName || 'User'}</span>
+                <span className="user-name">
+                  {user.firstName || 'User'}
+                  {process.env.REACT_APP_DEMO_EMAIL && user.email?.toLowerCase() === process.env.REACT_APP_DEMO_EMAIL.toLowerCase() && (
+                    <span style={{ marginLeft: '10px', padding: '4px 8px', background: 'rgba(46, 204, 113, 0.2)', color: '#2ecc71', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #2ecc71' }}>🟢 READ ONLY</span>
+                  )}
+                </span>
                 <button onClick={handleLogout}>Logout</button>
               </li>
             ) : (
@@ -204,7 +209,12 @@ function Nav() {
                 {(user.firstName || 'U').charAt(0).toUpperCase()}
               </div>
               <div className="sidebar-user-info">
-                <span className="sidebar-user-name">{user.firstName || 'User'} {user.lastName || ''}</span>
+                <span className="sidebar-user-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {user.firstName || 'User'} {user.lastName || ''}
+                  {process.env.REACT_APP_DEMO_EMAIL && user.email?.toLowerCase() === process.env.REACT_APP_DEMO_EMAIL.toLowerCase() && (
+                    <span style={{ padding: '2px 6px', background: 'rgba(46, 204, 113, 0.2)', color: '#2ecc71', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', border: '1px solid #2ecc71' }}>🟢 READ ONLY</span>
+                  )}
+                </span>
                 <span className="sidebar-user-email">{user.email}</span>
               </div>
             </div>

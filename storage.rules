@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Craft rules based on the provided default Security Rules for Cloud Storage, but modified
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.email != 'demo@example.com';
+    }
+  }
+}

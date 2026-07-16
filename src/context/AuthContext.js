@@ -20,6 +20,10 @@ export function AuthProvider({ children }) {
         console.log('✓ Admin email matched');
         return true;
       }
+      if (process.env.REACT_APP_DEMO_EMAIL && email?.toLowerCase() === process.env.REACT_APP_DEMO_EMAIL.toLowerCase()) {
+        console.log('✓ Demo email matched (Admin access)');
+        return true;
+      }
       try {
         // Check settings in Firebase
         const settingsSnap = await get(ref(db, 'settings'));

@@ -13,12 +13,23 @@
  */
 
 import api from './api';
-import { db as firebaseDB } from '../firebase';
+import { auth, db as firebaseDB } from '../firebase';
 import {
   ref, get, push, update, remove
 } from 'firebase/database';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+export const isDemoUser = () => {
+  const demoEmail = process.env.REACT_APP_DEMO_EMAIL;
+  return demoEmail && auth && auth.currentUser?.email?.toLowerCase() === demoEmail.toLowerCase();
+};
+
+const checkDemoRestriction = () => {
+  if (isDemoUser()) {
+    throw new Error('This is a demo account. Editing and deleting data are disabled.');
+  }
+};
+
 
 /** Returns true if the error means the API is unreachable */
 function isNetworkError(err) {
@@ -97,6 +108,7 @@ const getMenu = () =>
   );
 
 const addMenuItem = async (item) => {
+  checkDemoRestriction();
   try {
     const res = await api.post('/menu', item);
     // Sync with Firebase to keep real-time listeners happy
@@ -119,6 +131,7 @@ const addMenuItem = async (item) => {
 };
 
 const updateMenuItem = async (id, updates) => {
+  checkDemoRestriction();
   try {
     const res = await api.put(`/menu/${id}`, updates);
     try {
@@ -135,6 +148,7 @@ const updateMenuItem = async (id, updates) => {
 };
 
 const deleteMenuItem = async (id) => {
+  checkDemoRestriction();
   try {
     const res = await api.delete(`/menu/${id}`);
     try { await remove(ref(firebaseDB, `menu/${id}`)); } catch(e) {}
@@ -148,6 +162,7 @@ const deleteMenuItem = async (id) => {
 };
 
 const bulkDeleteMenuItems = async (ids) => {
+  checkDemoRestriction();
   try {
     const res = await api.delete('/menu/bulk', { data: { ids } });
     try {
@@ -232,6 +247,7 @@ const createOrder = async (orderData) => {
 };
 
 const updateOrderStatus = async (id, status, extra = {}) => {
+  checkDemoRestriction();
   try {
     const res = await api.put(`/orders/${id}/status`, { status, ...extra });
     try {
@@ -248,6 +264,7 @@ const updateOrderStatus = async (id, status, extra = {}) => {
 };
 
 const deleteOrder = async (id) => {
+  checkDemoRestriction();
   try {
     const res = await api.delete(`/orders/${id}`);
     try {
@@ -264,6 +281,7 @@ const deleteOrder = async (id) => {
 };
 
 const bulkDeleteOrders = async (ids) => {
+  checkDemoRestriction();
   try {
     const res = await api.delete('/orders/bulk', { data: { ids } });
     try {
@@ -313,6 +331,7 @@ const createReservation = async (data) => {
 };
 
 const updateReservationStatus = async (id, status) => {
+  checkDemoRestriction();
   try {
     const res = await api.put(`/reservations/${id}/status`, { status });
     try {
@@ -329,6 +348,7 @@ const updateReservationStatus = async (id, status) => {
 };
 
 const deleteReservation = async (id) => {
+  checkDemoRestriction();
   try {
     const res = await api.delete(`/reservations/${id}`);
     try {
@@ -345,6 +365,7 @@ const deleteReservation = async (id) => {
 };
 
 const bulkDeleteReservations = async (ids) => {
+  checkDemoRestriction();
   try {
     const res = await api.delete('/reservations/bulk', { data: { ids } });
     try {
@@ -375,6 +396,7 @@ const getUsers = () =>
   );
 
 const addUser = async (userData) => {
+  checkDemoRestriction();
   try {
     const res = await api.post('/users', userData);
     try {
@@ -394,6 +416,7 @@ const addUser = async (userData) => {
 };
 
 const updateUser = async (id, updates) => {
+  checkDemoRestriction();
   try {
     const res = await api.put(`/users/${id}`, updates);
     try {
@@ -410,6 +433,7 @@ const updateUser = async (id, updates) => {
 };
 
 const deleteUser = async (id) => {
+  checkDemoRestriction();
   try {
     const res = await api.delete(`/users/${id}`);
     try {
@@ -426,6 +450,7 @@ const deleteUser = async (id) => {
 };
 
 const bulkDeleteUsers = async (ids) => {
+  checkDemoRestriction();
   try {
     const res = await api.delete('/users/bulk', { data: { ids } });
     try {
@@ -456,6 +481,7 @@ const getAuthorizedUsers = () =>
   );
 
 const addAuthorizedUser = async (email) => {
+  checkDemoRestriction();
   try {
     const emails = email.split(/[\s,]+/).filter(e => e.trim());
     const res = await api.post('/authorized-users', { emails });
@@ -480,6 +506,7 @@ const addAuthorizedUser = async (email) => {
 };
 
 const removeAuthorizedUser = async (id) => {
+  checkDemoRestriction();
   try {
     const res = await api.delete(`/authorized-users/${id}`);
     try {
