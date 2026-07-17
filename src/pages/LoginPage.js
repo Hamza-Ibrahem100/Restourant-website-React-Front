@@ -97,8 +97,8 @@ function LoginPage() {
   const handleDemoLogin = async () => {
     setLoading(true);
     try {
-      const demoEmail = process.env.REACT_APP_DEMO_EMAIL || 'demo@example.com';
-      const demoPassword = process.env.REACT_APP_DEMO_PASSWORD || 'demo123';
+      const demoEmail = process.env.REACT_APP_DEMO_EMAIL || 'demo2@example.com';
+      const demoPassword = process.env.REACT_APP_DEMO_PASSWORD || 'demo123456';
       await signInWithEmailAndPassword(auth, demoEmail, demoPassword);
       showPopup('Signed in as Demo User.');
       setTimeout(() => navigate('/'), 1500);
@@ -209,8 +209,8 @@ function LoginPage() {
                 <h4 style={{ color: 'var(--primary-accent)', marginBottom: '10px' }}>Recruiter?</h4>
                 <p style={{ fontSize: '14px', marginBottom: '15px', color: 'var(--text-secondary)' }}>Use the demo account below to explore the project instantly.</p>
                 <div style={{ fontSize: '14px', marginBottom: '15px', background: 'var(--bg-dark)', padding: '10px', borderRadius: '4px', fontFamily: 'monospace' }}>
-                  <strong>Email:</strong> {process.env.REACT_APP_DEMO_EMAIL || 'demo@example.com'}<br/>
-                  <strong>Password:</strong> {process.env.REACT_APP_DEMO_PASSWORD || 'demo123'}
+                  <strong>Email:</strong> {process.env.REACT_APP_DEMO_EMAIL || 'demo2@example.com'}<br/>
+                  <strong>Password:</strong> {process.env.REACT_APP_DEMO_PASSWORD || 'demo123456'}
                 </div>
                 <button type="button" className="form-submit" onClick={handleDemoLogin} disabled={loading} style={{ background: 'var(--primary-accent)', color: 'var(--bg-dark)', marginTop: 0 }}>
                   Login as Demo
